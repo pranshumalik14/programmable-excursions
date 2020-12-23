@@ -33,23 +33,23 @@ end
 end
 
 # constant global struct for world coordinate frame
-const 𝒲 = Frame2(0.0, 0.0, 0.0, "World")
+const 𝑊 = Frame2(0.0, 0.0, 0.0, "World")
 
 # holds 2D point information; a vector
 @with_kw mutable struct Point2 <: GeometricObject2D
     x::Real
     y::Real
-    𝓊::Frame2 = 𝒲
+    𝑢::Frame2 = 𝑊
 end
 
 # holds 2D pose information; note that, by convention, θ increases in the anticlockwise
-# direction; pose is stored for frame 𝓊 with respect to frame 𝓋.
+# direction; pose is stored for frame 𝑢 with respect to frame 𝑣.
 @with_kw mutable struct Pose2 <: GeometricObject2D
     x::Real
     y::Real
     θ::Real
-    𝓊::Frame2 = 𝒲
-    𝓋::Frame2 = 𝒲
+    𝑢::Frame2 = 𝑊
+    𝑣::Frame2 = 𝑊
 end
 
 
@@ -62,6 +62,7 @@ Pose operations
 # frame change, pose diff, pose add, pose struct
 # ᵛp = ᵛξᵤ ⋅ ᵘp -> dot operator for Pose to point. Will assert base frames to be the same
 # ᵛξₜ = ᵛξᵤ ⊕ ᵘξₜ -> oplus operator for pose to pose. Will assert base frames to be the same
+# minus operator on pose and point2, relying on the unary - operator defined for both
 
 
 """
@@ -110,5 +111,5 @@ map plotting utils
 
 # returns
 function plot_map(map::Map)
-    return heatmap(map.map)
+    plot!(heatmap(map.map))
 end
