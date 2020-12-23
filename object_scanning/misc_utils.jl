@@ -9,8 +9,11 @@ using Parameters
 
 
 """
-Struct definitions for holding map and pose information
+Types and struct definitions for holding map and pose information
 """
+
+abstract type GeometricObject end
+abstract type GeometricObject2D <: GeometricObject end
 
 # holds 2D map and its properties to hold the (sliced) object and environment information
 mutable struct Map
@@ -22,28 +25,31 @@ mutable struct Map
 end
 
 # holds frame information (immutable)
-struct Frame
+@with_kw struct Frame2 <: GeometricObject2D
     x::Real
     y::Real
     θ::Real
     name::AbstractString
 end
 
+# constant global struct for world coordinate frame
+const 𝒲 = Frame2(0.0, 0.0, 0.0, "World")
+
 # holds 2D point information; a vector
-@with_kw mutable struct Point2
+@with_kw mutable struct Point2 <: GeometricObject2D
     x::Real
     y::Real
-    𝓊::Frame
+    𝓊::Frame2 = 𝒲
 end
 
 # holds 2D pose information; note that, by convention, θ increases in the anticlockwise
 # direction; pose is stored for frame 𝓊 with respect to frame 𝓋.
-@with_kw mutable struct Pose2
+@with_kw mutable struct Pose2 <: GeometricObject2D
     x::Real
     y::Real
     θ::Real
-    𝓊::Frame
-    𝓋::Frame
+    𝓊::Frame2 = 𝒲
+    𝓋::Frame2 = 𝒲
 end
 
 
@@ -94,7 +100,7 @@ function generate_map(l::Real, w::Real, f::Function; g::Function=zero, res=5e-2,
         @inbounds map[1:f_idx, x] = obj_vec # slice in object val vector
     end
 
-    return map
+    return Map(map, res, low, high, und)
 end
 
 
@@ -103,10 +109,6 @@ map plotting utils
 """
 
 # returns
-function plot_map(map::Matrix{<:Real})
-    return heatmap(map)
+function plot_map(map::Map)
+    return heatmap(map.map)
 end
-
-f = x -> 0.5 * x - sin(0.5x) * x * 0.1
-g = x -> 0.25 * x - x * cos(0.25x) * 0.1
-generate_map(5.5, 2, f; g=g) |> plot_map
