@@ -163,7 +163,7 @@ function ⋅(ξ::P₂, p::Point2) where {P₂ <: Union{Pose2,Zero2}}
 
     # 2D homogenous transform from {𝑈} to {𝑉}
     ᵛ𝑅ᵤ = rot2(ξ.𝑉, p.𝑉)
-    ᵛ𝑡ᵤ = trans2(ξ.𝑉, p.𝑉)
+    ᵛ𝑡ᵤ = transl2(ξ.𝑉, p.𝑉)
     ᵛ𝑇ᵤ = @SMatrix  [[ᵛ𝑅ᵤ       ᵛ𝑡ᵤ];
                     SA[0.0  0.0  1.0]]
     ᵘp̃ = @SVector [p.x, p.y, 1] # homogenous vector for source point
