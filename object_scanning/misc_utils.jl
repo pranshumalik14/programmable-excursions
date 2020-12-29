@@ -80,7 +80,7 @@ function rot2(𝑈::Frame2, 𝑉::Frame2)
 end
 
 # returns a translation vector from 2D frame {𝑉} to 2D frame {𝑈}, ᵛtᵤ
-function trans2(𝑈::Frame2, 𝑉::Frame2)
+function transl2(𝑈::Frame2, 𝑉::Frame2)
     return @SVector [𝑈.x - 𝑉.x, 𝑈.y - 𝑉.y]
 end
 
@@ -130,7 +130,7 @@ Pose and point operations and algebra:
 2. ξ₁ ⊕ ξ₂ ≠ ξ₂ ⊕ ξ₁
 3. ⊖ ᵗξᵤ = ᵘξₜ
 4. ξ ⊖ ξ = 𝛰; ⊖ ξ ⊕ ξ = 𝛰
-5. ξ ⊖ 𝛰 = ξ; ⊖ ξ ⊕ 𝛰 = 𝛰
+5. ξ ⊖ 𝛰 = ξ; ξ ⊕ 𝛰 = ξ
 6. ᵗξᵤ ⋅ ᵘp = ᵗp
 """
 
