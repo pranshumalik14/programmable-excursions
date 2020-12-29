@@ -164,8 +164,8 @@ function ⋅(ξ::P₂, p::Point2) where {P₂ <: Union{Pose2,Zero2}}
     # 2D homogenous transform from {𝑈} to {𝑉}
     ᵛ𝑅ᵤ = rot2(ξ.𝑉, p.𝑉)
     ᵛ𝑡ᵤ = trans2(ξ.𝑉, p.𝑉)
-    ᵛ𝑇ᵤ = @SMatrix  [[ᵛ𝑅ᵤ   ᵛ𝑡ᵤ];
-                    SA[0    0   1]]
+    ᵛ𝑇ᵤ = @SMatrix  [[ᵛ𝑅ᵤ       ᵛ𝑡ᵤ];
+                    SA[0.0  0.0  1.0]]
     ᵘp̃ = @SVector [p.x, p.y, 1] # homogenous vector for source point
     ᵛx, ᵛy, _ = ᵛ𝑇ᵤ * ᵘp̃        # homogenous vector for target point
 
@@ -213,7 +213,7 @@ function generate_map(l::Real, w::Real, f::Function; g::Function=zero, res=1e-3,
         f_idx = (0 ≤ f_val) ? min(f_val + 1, m) : continue  # object not present if f(x) < 0
         g_idx = (0 ≤ g_val) ? min(g_val + 1, f_idx) : 1     # no undef elements if g(x) < 0
         obj_vec = vcat(fill(und, (g_idx - 1, 1)), fill(high, (f_idx - g_idx + 1, 1)))
-        @inbounds map[1:f_idx, x] .= obj_vec # slice in object val vector
+        @inbounds map[1:f_idx, x] = obj_vec # slice in object val vector
     end
 
     return Map(map, low, high, und, res)
@@ -230,7 +230,7 @@ Map and pose plotting utils
 function plot_map(map::Map; Δx=0.5, Δy=0.5, xₛ=0.0, yₛ=0.1)
     @unpack map, res = map
     m, n = size(map)
-    heatmap(map, aspect_ratio=:equal)
+    heatmap(map)
     xticks!([(xₛ / res):(Δx / res):n; n], [xₛ:Δx:(n * res); (n * res)] .|> string)
     yticks!([(yₛ / res):(Δy / res):m; m], [yₛ:Δy:(m * res); (m * res)] .|> string)
     xlabel!("Length (m)")
