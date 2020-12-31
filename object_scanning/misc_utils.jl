@@ -1,7 +1,8 @@
 """
-Miscellaneous functions to facilitate generation and plotting of a smooth scanning profile
-around the object, preferably a constant distance away from the surface and accounting for
-other objects/obstacles in the way.
+Miscellaneous utilities (types, functions, ...) to provide a basis for generating a smooth
+scanning profile around an object, preferably a constant distance away from the surface
+while accounting for other objects/obstacles in the way. Functions to plot map, points, ...
+are also provided.
 """
 
 using Plots
@@ -9,6 +10,14 @@ using Parameters
 using LinearAlgebra
 using StaticArrays
 
+# !!todo!!: the current member type system (in frames, poses, points) restricts usage
+# either make them separately inferred or just have all of them as floats
+
+# !!todo!!: construction of a Pose2 with 𝑈 and 𝑉 having the same names should be
+# automatically made Zero2; with a warning message in the logger
+
+# !!todo!!:for default names, create a unique numbered (static global variable) frame so
+# that unwanted degeneration from Pose2 to Zero2 doesn't occur
 
 """
 Types and struct definitions for holding map and pose information
@@ -20,7 +29,7 @@ abstract type AbstractFrame <: GeometricEntity end
 abstract type AbstractPoint <: GeometricEntity end
 
 # holds 2D map and its properties to hold the (sliced) object and environment information
-@with_kw mutable struct Map{T <: Real,F <: AbstractFloat}
+@with_kw mutable struct Map{T <: Real,F <: Real}
     map::Matrix{T}
     low::T
     high::T
@@ -32,56 +41,62 @@ end
 # default, defined wrt the (right-handed) world  coordinate frame.  note that, by
 # convention, θ (rad) increases in the anticlockwise direction. the 2D frame entity lives
 # in SE(2).
-@with_kw struct Frame2{T <: Real,S <: AbstractString} <: AbstractFrame
-    x::T
-    y::T
-    θ::T
-    name::S
+@with_kw struct Frame2 <: AbstractFrame
+    x::Real
+    y::Real
+    θ::Real # todo: conversion to (-π, π] to be looked up; also should be transform stable.
+    name::AbstractString
 end
 
 # returns a world coordinate frame with origin of type T
-𝑊(T) = Frame2{T,String}(0, 0, 0, "World")
+𝑊() = Frame2(0, 0, 0, "world")
 
 # holds 2D point information; a 2D bounded vector wrt frame {𝑉}
-@with_kw mutable struct Point2{T <: Real} <: AbstractPoint
-    x::T
-    y::T
-    𝑉::Frame2{T,<:AbstractString} = 𝑊(T)
+@with_kw mutable struct Point2 <: AbstractPoint
+    x::Real
+    y::Real
+    𝑉::Frame2 = 𝑊()
 end
 
 # type alias for a 2D point (inferred as a bound-to-frame vector)
 const Vector2 = Point2
 
-# representation of 2D relative pose, ᵛξᵤ, head frame {𝑈} wrt tail frame {𝑉} or rigid body
-# motion from {𝑈} to {𝑉}. the default reference frame {𝑉} is the world frame. the 2D
-# pose entity lives in SE(2).
-@with_kw mutable struct Pose2{T <: Real} <: AbstractPose
-    𝑈::Frame2{T,<:AbstractString} = Frame2{T,String}(0, 0, 0, "unnamed") # Frame{pose head}
-    𝑉::Frame2{T,<:AbstractString} = 𝑊(T) # Frame{pose tail/base (reference)}
+# representation of 2D relative pose, ᵛξᵤ, head (pseudo) frame {𝑈} wrt tail frame {𝑉} or
+# rigid body motion from {𝑈} to {𝑉}. the default reference frame {𝑉} is the world frame.
+# the 2D pose entity lives in SE(2).
+@with_kw mutable struct Pose2 <: AbstractPose
+    𝑈::Frame2 = Frame2(0, 0, 0, "unnamed") # Frame{pose head}
+    𝑉::Frame2 = 𝑊() # Frame{pose tail/base (reference)}
 end
 
 # explicit representation of a zero pose
-@with_kw struct Zero2{T <: Real} <: AbstractPose
-    𝑈::Frame2{T,<:AbstractString} = Frame2{T,String}(0, 0, 0, "zero")
-    𝑉::Frame2{T,<:AbstractString} = 𝑈
+struct Zero2 <: AbstractPose
+    𝑈::Frame2
+    𝑉::Frame2
+
+    function Zero2()
+        𝑈 = Frame2(0, 0, 0, "zero")
+        𝑉 = 𝑈
+        new(𝑈, 𝑉)
+    end
 end
 
-# returns a zero relative pose of type T
-𝛰(T) = Zero2{T}()
+# returns a zero relative pose of type T <: Real
+𝛰() = Zero2()
 
 # type alias for union of all 2D geometric entities
 const GeometricEntity2D = Union{Pose2,Point2,Frame2,Zero2}
 
 # returns a rotation transformation from 2D frame {𝑈} to 2D frame {𝑉}, ᵛRᵤ
 function rot2(𝑈::Frame2, 𝑉::Frame2)
-    Δθ = 𝑈.θ - 𝑉.θ
-    return @SMatrix [cos(Δθ) -sin(Δθ);
-                    sin(Δθ) cos(Δθ)]
+    θ = 𝑈.θ + 𝑉.θ
+    return Matrix{Float64}([cos(θ) -sin(θ);
+                            sin(θ)  cos(θ)])
 end
 
 # returns a translation vector from 2D frame {𝑉} to 2D frame {𝑈}, ᵛtᵤ
 function transl2(𝑈::Frame2, 𝑉::Frame2)
-    return @SVector [𝑈.x - 𝑉.x, 𝑈.y - 𝑉.y]
+    return [𝑈.x + 𝑉.x, 𝑈.y + 𝑉.y]
 end
 
 
@@ -89,21 +104,27 @@ end
 Custom constructors and field accessors for pose and point.
 """
 
-# Pose2(x,y,θ; name=head_frame_name, 𝑉=base_frame)
-function Pose2(x::T, y::T, θ::T; name::S="unnamed", 𝑉::F=𝑊(T)) where
-    {T <: Real,S <: AbstractString,F <: AbstractFrame}
+# Pose2(x,y,θ; name=head_frame_name, 𝑉=base_frame); todo: type constraint for all params is
+# a bit annoying -- change to Real for all x, y, θ separately
+function Pose2(x::Real, y::Real, θ::Real; name::S="unnamed", 𝑉::Frame2=𝑊()) where
+    {S <: AbstractString}
     𝑈 = Frame2(x, y, θ, name)
     Pose2(𝑈, 𝑉)
 end
 
 # Point2(x,y)
-function Point2(x::T, y::T) where {T <: Real}
-    Point2(x, y, 𝑊(T))
+function Point2(x::Real, y::Real)
+    Point2(x, y, 𝑊())
 end
 
-# Point2({ᵛξᵤ, 𝐹})
-function Point2(ξ::P) where {P <: Union{Pose2,Zero2,Frame2}}
-    Point2(ξ.x, ξ.y, ξ.𝑉)
+# Point2(ᵛξᵤ) = Point2(ᵛ{𝑈}); creates the origin of the frame {𝑈} wrt frame {𝑉}
+function Point2(ξ::P) where {P <: Union{Pose2,Zero2}}
+    ξ ⋅ Point2(0.0, 0.0, ξ.𝑈)
+end
+
+# Point2(ʷ{𝐹}); origin of frame {𝐹} wrt world
+function Point2(𝑈::Frame2)
+    Point2(𝑈.x, 𝑈.y, 𝑊())
 end
 
 # Pose2 custom field accessors for ease of use (Pose2.{x,y,θ})
@@ -134,57 +155,110 @@ Pose and point operations and algebra:
 6. ᵗξᵤ ⋅ ᵘp = ᵗp
 """
 
-# oplus operator for pose
-function ⊕(ξ₁::AbstractPose, ξ₂::AbstractPose)
+# oplus operator for pose; by default requires base and reference frames to be same
+function ⊕(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2})
     if ξ₁ isa Zero2
         return ξ₂
     elseif ξ₂ isa Zero2
         return ξ₁
     else
-        @assert (ξ₁.𝑈 == ξ₂.𝑉)
-        return (ξ₁.𝑉 == ξ₂.𝑈) ? Pose2(ξ₂.𝑈, ξ₁.𝑉) : 𝛰(typeof(ξ₁.x))
+        @assert ξ₁.𝑈.name == ξ₂.𝑉.name
+        if (ξ₁.𝑉.name == ξ₂.𝑈.name) return 𝛰() end
+        x, y, θ = compose2(@SVector([ξ₁.x, ξ₁.y, ξ₁.θ]), @SVector([ξ₂.x, ξ₂.y, ξ₂.θ]))
+        𝑈 = Frame2(x, y, θ, ξ₂.name)
+        return Pose2(𝑈, ξ₁.𝑉) # todo: check if this is same as Pose2(x₁ + x₂, y₁ + y₂, θ₁ + θ₂)
     end
 end
 
-# ominus unary operator for pose
-function Base.:-(ξ::P) where {P <: AbstractPose}
-    return Pose2(ξ.𝑉, ξ.𝑈) # flip reference and head frames
+# compose operator for pose, with no frame assertion; <returns ξ₁ ⊕ ξ₂ wrt {ξ₁.𝑉} ???>
+function Base.:∘(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2})
+    if ξ₁ isa Zero2
+        return ξ₂
+    elseif ξ₂ isa Zero2
+        return ξ₁
+    else
+        x, y, θ = compose2(@SVector([ξ₁.x, ξ₁.y, ξ₁.θ]), @SVector([ξ₂.x, ξ₂.y, ξ₂.θ]))
+        𝑈 = Frame2(x, y, θ, ξ₂.name)
+        return Pose2(𝑈, ξ₁.𝑉) # todo: check if this is same as Pose2(x₁ + x₂, y₁ + y₂, θ₁ + θ₂)
+    end
 end
 
-# ominus unary operator for pose
-function Base.:-(ξ₁::AbstractPose, ξ₂::AbstractPose)
-    return ξ₁ ⊕ -(ξ₂)
+# returns (x, y, θ) ∼ T1 ∘ T2 where T ∈ SE(2)
+function compose2(T₁::SVector{3}, T₂::SVector{3})
+    𝑅₁ = @SMatrix   [cos(T₁[3]) -sin(T₁[3]);
+                     sin(T₁[3])  cos(T₁[3]);]
+    𝑇₁ = [[𝑅₁ T₁[1:2]]; SA[0 0 1]]
+
+    𝑅₂ = @SMatrix   [cos(T₂[3]) -sin(T₂[3]);
+                     sin(T₂[3])  cos(T₂[3]);]
+    𝑇₂ = [[𝑅₂ T₂[1:2]]; SA[0 0 1]]
+
+    𝑇 = 𝑇₁ * 𝑇₂
+
+    return (𝑇[1,3], 𝑇[2, 3], atan(𝑇[2, 1], 𝑇[1, 1])) # x, y, θ of the composed transform
 end
+
+# plus binary operator for pose, with no frame assertion; <returns ξ₁ ⊕ ξ₂ wrt {ξ₁.𝑉} ???>
+Base.:+(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2}) = Base.:∘(ξ₁, ξ₂)
+
+# minus unary operator for pose
+function Base.:-(ξ::P) where {P <: Union{Pose2,Zero2}}
+    # get global frame ʷ{𝑈} and then return inverse relative pose
+    𝑇 = @SMatrix   [cos(ξ.θ) -sin(ξ.θ) ξ.x;
+                    sin(ξ.θ)  cos(ξ.θ) ξ.y;
+                    0         0          1]
+    x, y, θ = compose2(@SVector([ξ.𝑉.x, ξ.𝑉.y, ξ.𝑉.θ]), @SVector([ξ.x, ξ.y, ξ.θ]))
+    ʷ𝑈 = Frame2(x, y, θ, ξ.name)
+    𝑇⁻¹ = inv(𝑇) # todo: check if ∼ (-x,-y, -θ)
+
+    return Pose2(𝑇⁻¹[1,3], 𝑇⁻¹[2, 3], atan(𝑇⁻¹[2, 1], 𝑇⁻¹[1, 1]); name=ξ.𝑉.name,
+        𝑉=ʷ𝑈)
+end
+
+# ominus binary operator for pose
+⊖(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2}) = ξ₁ ⊕ -(ξ₂)
+
+# minus binary operator for pose; composes ξ₁ and -(ξ₂) without frame assertion
+Base.:-(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2}) = ξ₁ ∘ -(ξ₂)
 
 # dot operator for point frame transformation by a relative pose, ᵛξᵤ ⋅ ᵘp = ᵛp
-function ⋅(ξ::P₂, p::Point2) where {P₂ <: Union{Pose2,Zero2}}
+function ⋅(ξ::P, p::Point2) where {P <: Union{Pose2,Zero2}}
+    if ξ isa Zero2 && p.𝑉.name ∈ ("world", "zero")
+        return p
+    end
+
     # point should be relative to head frame of the pose
-    @assert ξ.𝑈 == p.𝑉
+    @assert ξ.𝑈.name == p.𝑉.name && p.𝑉.name ≠ "null"
 
     # 2D homogenous transform from {𝑈} to {𝑉}
-    ᵛ𝑅ᵤ = rot2(ξ.𝑉, p.𝑉)
-    ᵛ𝑡ᵤ = transl2(ξ.𝑉, p.𝑉)
-    ᵛ𝑇ᵤ = @SMatrix  [[ᵛ𝑅ᵤ       ᵛ𝑡ᵤ];
-                    SA[0.0  0.0  1.0]]
-    ᵘp̃ = @SVector [p.x, p.y, 1] # homogenous vector for source point
-    ᵛx, ᵛy, _ = ᵛ𝑇ᵤ * ᵘp̃        # homogenous vector for target point
+    ᵛ𝑅ᵤ = rot2(ξ.𝑈, ξ.𝑉)
+    ᵛ𝑡ᵤ = transl2(ξ.𝑈, ξ.𝑉)
+    ᵛ𝑇ᵤ = Matrix{Float64}([ᵛ𝑅ᵤ  ᵛ𝑡ᵤ;
+                            0  0  1])
+    ᵘp̃ = [p.x, p.y, 1]      # homogenous vector for source point
+    ᵛx, ᵛy, _ = ᵛ𝑇ᵤ * ᵘp̃    # homogenous vector for target point
 
-    return Point2(ᵛx, ᵛy)
+    return Point2(ᵛx, ᵛy, ξ.𝑉)
 end
 
-# extending `+` operator for 2D points
+# extending `+` binary operator for 2D points
 function Base.:+(p₁::Point2, p₂::Point2)
     # only operate on points/vectors in the same reference frame
-    @assert p₁.𝑉 == p₂.𝑉
+    @assert p₁.𝑉.name ≠ "null" && p₂.𝑉.name ≠ "null"
+    @assert p₁.𝑉.name == p₂.𝑉.name
     return Point2(p₁.x + p₂.x, p₁.y + p₂.y, p₁.𝑉)
 end
 
-# extending `-` operator for 2D points
+# extending `-` binary operator for 2D points
 function Base.:-(p₁::Point2, p₂::Point2)
-    # only operate on points/vectors in the same reference frame
-    @assert p₁.𝑉 == p₂.𝑉
-    return Point2(p₁.x - p₂.x, p₁.y - p₂.y, p₁.𝑉)
+    # only operate on points/vectors in the same reference frame; output wrt p₂ (hence null)
+    @assert p₁.𝑉.name ≠ "null" && p₂.𝑉.name ≠ "null"
+    @assert p₁.𝑉.name == p₂.𝑉.name
+    return Point2(p₁.x - p₂.x, p₁.y - p₂.y, Frame2(0, 0, 0, "null"))
 end
+
+# extending `-` unary operator for 2D points
+Base.:-(p::Point2) = Point2(-p.x, - p.y, p.𝑉)
 
 # returns the Lᵖ-norm of a 2D pose or point. extending the base linear algebra method.
 function LinearAlgebra.norm(p2::GeometricEntity2D; p::Real=2)
