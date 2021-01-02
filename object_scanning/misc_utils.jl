@@ -1,7 +1,7 @@
 """
-Miscellaneous utilities (types, functions, ...) to provide a basis for generating a smooth
+Miscellaneous utilities (types and functions) to provide a basis for generating a smooth
 scanning profile around an object, preferably a constant distance away from the surface
-while accounting for other objects/obstacles in the way. Functions to plot map, points, ...
+while accounting for other objects/obstacles in the way. Functions to plot map and points
 are also provided.
 """
 
@@ -10,9 +10,9 @@ using Parameters
 using LinearAlgebra
 using StaticArrays
 
-# !!todo!!: get frame from pose: constructor for frame Frame2(ʷξᵤ) = ʷ{𝑈}
-
-# !!todo!!: compose pose with frame; sets frame as reference for pose automatically
+# !!todo!!: compose pose with frame; sets frame as reference for pose automatically; will
+# have to involve 𝑊() as well since frames are wrt world, and if world is not set to 0 then
+# answers will be different
 
 # !!todo!!: construction of a Pose2 with 𝑈 and 𝑉 having the same names should be
 # automatically made Zero2; with a warning message in the logger
@@ -89,20 +89,20 @@ end
 const GeometricEntity2D = Union{Pose2,Point2,Frame2,Zero2}
 
 # returns a rotation transformation from 2D frame {𝑈} to 2D frame {𝑉}, ᵛRᵤ
-function rot2(𝑈::Frame2)
+@inline function rot2(𝑈::Frame2)
     @unpack θ = 𝑈
     return Matrix{Float64}([cos(θ) -sin(θ);
                             sin(θ)  cos(θ)])
 end
 
 # returns a translation vector from 2D frame {𝑉} to 2D frame {𝑈}, ᵛtᵤ
-function transl2(𝑈::Frame2)
+@inline function transl2(𝑈::Frame2)
     return [𝑈.x, 𝑈.y]
 end
 
 
 """
-Custom constructors and field accessors for pose and point.
+Custom constructors and field accessors for pose, frame, and point.
 """
 
 # Pose2(x,y,θ; name=head_frame_name, 𝑉=base_frame);
@@ -110,6 +110,12 @@ function Pose2(x::Real, y::Real, θ::Real; name::S="unnamed", 𝑉::Frame2=𝑊(
     {S <: AbstractString}
     𝑈 = Frame2(x, y, θ, name)
     Pose2(𝑈, 𝑉)
+end
+
+# Frame2(ᵛξᵤ) creates frame ʷ{𝑈}
+function Frame2(ξ::P) where {P <: Union{Pose2,Zero2}}
+    x, y, θ = compose2(@SVector([ξ.𝑉.x, ξ.𝑉.y, ξ.𝑉.θ]), @SVector([ξ.x, ξ.y, ξ.θ]))
+    Frame2(x, y, θ, ξ.name) # ʷ{𝑈}
 end
 
 # Point2(x,y)
@@ -192,12 +198,10 @@ function Base.:-(ξ::P) where {P <: Union{Pose2,Zero2}}
     𝑇 = @SMatrix   [cos(ξ.θ) -sin(ξ.θ) ξ.x;
                     sin(ξ.θ)  cos(ξ.θ) ξ.y;
                     0         0          1]
-    x, y, θ = compose2(@SVector([ξ.𝑉.x, ξ.𝑉.y, ξ.𝑉.θ]), @SVector([ξ.x, ξ.y, ξ.θ]))
-    ʷ𝑈 = Frame2(x, y, θ, ξ.name)
+    ʷ𝑈 = Frame2(ξ)
     𝑇⁻¹ = inv(𝑇) # todo: check if ∼ (-x,-y, -θ)
 
-    return Pose2(𝑇⁻¹[1,3], 𝑇⁻¹[2, 3], atan(𝑇⁻¹[2, 1], 𝑇⁻¹[1, 1]); name=ξ.𝑉.name,
-        𝑉=ʷ𝑈)
+    return Pose2(𝑇⁻¹[1,3], 𝑇⁻¹[2, 3], atan(𝑇⁻¹[2, 1], 𝑇⁻¹[1, 1]); name=ξ.𝑉.name, 𝑉=ʷ𝑈)
 end
 
 # ominus binary operator for pose
@@ -207,7 +211,7 @@ end
 Base.:-(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2}) = ξ₁ ∘ -(ξ₂)
 
 # returns (x, y, θ) ∼ (T₁ ∘ T₂) where Tᵢ ∈ SE(2)
-function compose2(T₁::SVector{3}, T₂::SVector{3})
+@inline function compose2(T₁::SVector{3}, T₂::SVector{3})
     𝑅₁ = @SMatrix   [cos(T₁[3]) -sin(T₁[3]);
                      sin(T₁[3])  cos(T₁[3]);]
     𝑇₁ = [[𝑅₁ T₁[1:2]]; SA[0 0 1]]
