@@ -10,8 +10,9 @@ using Parameters
 using LinearAlgebra
 using StaticArrays
 
-# !!todo!!: the current member type system (in frames, poses, points) restricts usage
-# either make them separately inferred or just have all of them as floats
+# !!todo!!: get frame from pose: constructor for frame Frame2(ʷξᵤ) = ʷ{𝑈}
+
+# !!todo!!: compose pose with frame; sets frame as reference for pose automatically
 
 # !!todo!!: construction of a Pose2 with 𝑈 and 𝑉 having the same names should be
 # automatically made Zero2; with a warning message in the logger
@@ -48,7 +49,7 @@ end
     name::AbstractString
 end
 
-# returns a world coordinate frame with origin of type T
+# returns a world coordinate frame at origin set to (x,y,θ) (0,0,0)
 𝑊() = Frame2(0, 0, 0, "world")
 
 # holds 2D point information; a 2D bounded vector wrt frame {𝑉}
@@ -81,22 +82,22 @@ struct Zero2 <: AbstractPose
     end
 end
 
-# returns a zero relative pose of type T <: Real
+# returns a zero relative pose
 𝛰() = Zero2()
 
 # type alias for union of all 2D geometric entities
 const GeometricEntity2D = Union{Pose2,Point2,Frame2,Zero2}
 
 # returns a rotation transformation from 2D frame {𝑈} to 2D frame {𝑉}, ᵛRᵤ
-function rot2(𝑈::Frame2, 𝑉::Frame2)
-    θ = 𝑈.θ + 𝑉.θ
+function rot2(𝑈::Frame2)
+    @unpack θ = 𝑈
     return Matrix{Float64}([cos(θ) -sin(θ);
                             sin(θ)  cos(θ)])
 end
 
 # returns a translation vector from 2D frame {𝑉} to 2D frame {𝑈}, ᵛtᵤ
-function transl2(𝑈::Frame2, 𝑉::Frame2)
-    return [𝑈.x + 𝑉.x, 𝑈.y + 𝑉.y]
+function transl2(𝑈::Frame2)
+    return [𝑈.x, 𝑈.y]
 end
 
 
@@ -104,8 +105,7 @@ end
 Custom constructors and field accessors for pose and point.
 """
 
-# Pose2(x,y,θ; name=head_frame_name, 𝑉=base_frame); todo: type constraint for all params is
-# a bit annoying -- change to Real for all x, y, θ separately
+# Pose2(x,y,θ; name=head_frame_name, 𝑉=base_frame);
 function Pose2(x::Real, y::Real, θ::Real; name::S="unnamed", 𝑉::Frame2=𝑊()) where
     {S <: AbstractString}
     𝑈 = Frame2(x, y, θ, name)
@@ -170,7 +170,7 @@ function ⊕(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2})
     end
 end
 
-# compose operator for pose, with no frame assertion; <returns ξ₁ ⊕ ξ₂ wrt {ξ₁.𝑉} ???>
+# compose operator for pose, with no frame assertion; returns unnamed pose wrt {ξ₁.𝑉}
 function Base.:∘(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2})
     if ξ₁ isa Zero2
         return ξ₂
@@ -178,27 +178,12 @@ function Base.:∘(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2})
         return ξ₁
     else
         x, y, θ = compose2(@SVector([ξ₁.x, ξ₁.y, ξ₁.θ]), @SVector([ξ₂.x, ξ₂.y, ξ₂.θ]))
-        𝑈 = Frame2(x, y, θ, ξ₂.name)
+        𝑈 = Frame2(x, y, θ, "unnamed")
         return Pose2(𝑈, ξ₁.𝑉) # todo: check if this is same as Pose2(x₁ + x₂, y₁ + y₂, θ₁ + θ₂)
     end
 end
 
-# returns (x, y, θ) ∼ T1 ∘ T2 where T ∈ SE(2)
-function compose2(T₁::SVector{3}, T₂::SVector{3})
-    𝑅₁ = @SMatrix   [cos(T₁[3]) -sin(T₁[3]);
-                     sin(T₁[3])  cos(T₁[3]);]
-    𝑇₁ = [[𝑅₁ T₁[1:2]]; SA[0 0 1]]
-
-    𝑅₂ = @SMatrix   [cos(T₂[3]) -sin(T₂[3]);
-                     sin(T₂[3])  cos(T₂[3]);]
-    𝑇₂ = [[𝑅₂ T₂[1:2]]; SA[0 0 1]]
-
-    𝑇 = 𝑇₁ * 𝑇₂
-
-    return (𝑇[1,3], 𝑇[2, 3], atan(𝑇[2, 1], 𝑇[1, 1])) # x, y, θ of the composed transform
-end
-
-# plus binary operator for pose, with no frame assertion; <returns ξ₁ ⊕ ξ₂ wrt {ξ₁.𝑉} ???>
+# plus binary operator for pose, with no frame assertion; returns unnamed pose wrt {ξ₁.𝑉}
 Base.:+(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2}) = Base.:∘(ξ₁, ξ₂)
 
 # minus unary operator for pose
@@ -221,6 +206,21 @@ end
 # minus binary operator for pose; composes ξ₁ and -(ξ₂) without frame assertion
 Base.:-(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2}) = ξ₁ ∘ -(ξ₂)
 
+# returns (x, y, θ) ∼ (T₁ ∘ T₂) where Tᵢ ∈ SE(2)
+function compose2(T₁::SVector{3}, T₂::SVector{3})
+    𝑅₁ = @SMatrix   [cos(T₁[3]) -sin(T₁[3]);
+                     sin(T₁[3])  cos(T₁[3]);]
+    𝑇₁ = [[𝑅₁ T₁[1:2]]; SA[0 0 1]]
+
+    𝑅₂ = @SMatrix   [cos(T₂[3]) -sin(T₂[3]);
+                     sin(T₂[3])  cos(T₂[3]);]
+    𝑇₂ = [[𝑅₂ T₂[1:2]]; SA[0 0 1]]
+
+    𝑇 = 𝑇₁ * 𝑇₂
+
+    return (𝑇[1,3], 𝑇[2, 3], atan(𝑇[2, 1], 𝑇[1, 1])) # x, y, θ of the composed transform
+end
+
 # dot operator for point frame transformation by a relative pose, ᵛξᵤ ⋅ ᵘp = ᵛp
 function ⋅(ξ::P, p::Point2) where {P <: Union{Pose2,Zero2}}
     if ξ isa Zero2 && p.𝑉.name ∈ ("world", "zero")
@@ -231,8 +231,8 @@ function ⋅(ξ::P, p::Point2) where {P <: Union{Pose2,Zero2}}
     @assert ξ.𝑈.name == p.𝑉.name && p.𝑉.name ≠ "null"
 
     # 2D homogenous transform from {𝑈} to {𝑉}
-    ᵛ𝑅ᵤ = rot2(ξ.𝑈, ξ.𝑉)
-    ᵛ𝑡ᵤ = transl2(ξ.𝑈, ξ.𝑉)
+    ᵛ𝑅ᵤ = rot2(ξ.𝑈)
+    ᵛ𝑡ᵤ = transl2(ξ.𝑈)
     ᵛ𝑇ᵤ = Matrix{Float64}([ᵛ𝑅ᵤ  ᵛ𝑡ᵤ;
                             0  0  1])
     ᵘp̃ = [p.x, p.y, 1]      # homogenous vector for source point
