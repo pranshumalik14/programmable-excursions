@@ -6,8 +6,8 @@ using InteractiveUtils
 
 # ╔═╡ 3bda4224-4970-11eb-29ac-091d674c6763
 begin
-	using PlutoUI;
 	include("misc_utils.jl");
+	using PlutoUI;
 end
 
 # ╔═╡ 50f53aaa-49f5-11eb-0d5a-cb3e9c45649a
@@ -65,11 +65,11 @@ generate_map(1.5, 0.45, x -> 2 * sin(0.05x) + 0.12x) |> plot_map
 
 # ╔═╡ 4184fefa-49f5-11eb-336b-4d9fe1466530
 begin
-	ᵒξᵤ
+	ᵒξᵤ.𝑈
 end
 
 # ╔═╡ Cell order:
-# ╠═3bda4224-4970-11eb-29ac-091d674c6763
+# ╟─3bda4224-4970-11eb-29ac-091d674c6763
 # ╟─50f53aaa-49f5-11eb-0d5a-cb3e9c45649a
 # ╠═701ff10c-4a1d-11eb-0b65-59b45daa23c2
 # ╟─e6de0e36-496f-11eb-32e9-7f92c36296a3
