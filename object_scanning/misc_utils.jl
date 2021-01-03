@@ -88,18 +88,6 @@ end
 # type alias for union of all 2D geometric entities
 const GeometricEntity2D = Union{Pose2,Point2,Frame2,Zero2}
 
-# returns a rotation transformation from 2D frame {𝑈} to 2D frame {𝑉}, ᵛRᵤ
-@inline function rot2(𝑈::Frame2)
-    @unpack θ = 𝑈
-    return Matrix{Float64}([cos(θ) -sin(θ);
-                            sin(θ)  cos(θ)])
-end
-
-# returns a translation vector from 2D frame {𝑉} to 2D frame {𝑈}, ᵛtᵤ
-@inline function transl2(𝑈::Frame2)
-    return [𝑈.x, 𝑈.y]
-end
-
 
 """
 Custom constructors and field accessors for pose, frame, and point.
@@ -148,6 +136,12 @@ function Base.getproperty(ξ::P, field::Symbol) where {P <: Union{Pose2,Zero2}}
     else
         error("Property $field for $ξ not defined!")
     end
+end
+
+# Point2 custom isapprox function
+function Base.isapprox(p₁::Point2, p₂::Point2)
+    @assert p₁.𝑉.name == p₂.𝑉.name
+    return p₁.x ≈ p₂.x && p₁.y ≈ p₂.y
 end
 
 
@@ -225,6 +219,19 @@ Base.:-(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2}) = ξ₁ ∘ -(ξ�
     return (𝑇[1,3], 𝑇[2, 3], atan(𝑇[2, 1], 𝑇[1, 1])) # x, y, θ of the composed transform
 end
 
+# returns a rotation transformation from 2D frame {𝑈} to reference frame {𝑉}, ᵛRᵤ
+@inline function rot2(ξ::P) where {P <: Union{Pose2,Zero2}}
+    @unpack 𝑈 = ξ; @unpack θ = 𝑈;
+    return @SMatrix ([cos(θ) -sin(θ);
+                      sin(θ)  cos(θ)])
+end
+
+# returns a translation vector from reference frame {𝑉} to 2D frame {𝑈}, ᵛtᵤ
+@inline function transl2(ξ::P) where {P <: Union{Pose2,Zero2}}
+    @unpack 𝑈 = ξ;
+    return @SVector [𝑈.x, 𝑈.y]
+end
+
 # dot operator for point frame transformation by a relative pose, ᵛξᵤ ⋅ ᵘp = ᵛp
 function ⋅(ξ::P, p::Point2) where {P <: Union{Pose2,Zero2}}
     if ξ isa Zero2 && p.𝑉.name ∈ ("world", "zero")
@@ -235,10 +242,10 @@ function ⋅(ξ::P, p::Point2) where {P <: Union{Pose2,Zero2}}
     @assert ξ.𝑈.name == p.𝑉.name && p.𝑉.name ≠ "null"
 
     # 2D homogenous transform from {𝑈} to {𝑉}
-    ᵛ𝑅ᵤ = rot2(ξ.𝑈)
-    ᵛ𝑡ᵤ = transl2(ξ.𝑈)
-    ᵛ𝑇ᵤ = Matrix{Float64}([ᵛ𝑅ᵤ  ᵛ𝑡ᵤ;
-                            0  0  1])
+    ᵛ𝑅ᵤ = rot2(ξ)
+    ᵛ𝑡ᵤ = transl2(ξ)
+    ᵛ𝑇ᵤ =   [[ᵛ𝑅ᵤ  ᵛ𝑡ᵤ];
+            SA[0  0  1]]
     ᵘp̃ = [p.x, p.y, 1]      # homogenous vector for source point
     ᵛx, ᵛy, _ = ᵛ𝑇ᵤ * ᵘp̃    # homogenous vector for target point
 
@@ -305,7 +312,7 @@ Map and pose plotting utils
 # plots map matrix as a heatmap with appropriate dimensions along the axes. Δx and Δy are
 # the x and y tick step sizes for the plot, respectively. xₛ and yₛ are the starting steps
 # for x and y axes so that ticks near origin do not collide. all units in are in meters.
-function plot_map(map::Map; Δx=0.5, Δy=0.5, xₛ=0.0, yₛ=0.1)
+function plot_map(map::Map; Δx=0.5, Δy=0.2, xₛ=0.0, yₛ=0.1)
     @unpack map, res = map
     m, n = size(map)
     heatmap(map)
