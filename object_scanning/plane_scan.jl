@@ -97,37 +97,38 @@ $(@bind 𝑤 Slider(0.2:0.01:1.5; default=0.5, show_value=true))
 Scan padding distance, `𝑑ₚ` =
 $(@bind 𝑑ₚ Slider(0.25:0.01:√2𝑤; default=round(3*√2𝑤/4; digits=2), show_value=true))
 
-Exterior surface, $f_e(x) = ax^2 + bx + c$
+Exterior surface, $f_e(x) = a(x-b)^2 + c$
 
 𝑎 =
-$(@bind a Slider(1:0.01:30; default=18.75, show_value=true)),
+$(@bind a Slider(-0.15:0.001:0.15; default=0.075, show_value=true)),
 𝑏 =
-$(@bind b Slider(0.0:0.01:2.0; default=0.12, show_value=true)),
+$(@bind b Slider(0.0:0.001:ℓ; default=ℓ/2, show_value=true)),
 𝑐 =
-$(@bind c Slider(-𝑤:0.01:𝑤; default=0.03, show_value=true))
+$(@bind c Slider(0.0:0.001:𝑤; default=𝑤/4, show_value=true))
 
-Interior surface, $f_i(x) = \tilde{a}x^2 + \tilde{b}x + \tilde{c}$
+Interior surface, $f_i(x) = \tilde{a}(x - \tilde{b})^2 + \tilde{c}$
 
 𝑎̃ =
-$(@bind ã Slider(0:0.01:10; default=0, show_value=true)),
+$(@bind ã Slider(-a:0.001:a; default=0, show_value=true)),
 𝑏̃ =
-$(@bind b̃ Slider(0.0:0.01:1.2; default=b, show_value=true)),
+$(@bind b̃ Slider(0.0:0.001:ℓ; default=ℓ/2, show_value=true)),
 𝑐̃ =
-$(@bind c̃ Slider(-𝑤:0.01:𝑤; default=0, show_value=true))
+$(@bind c̃ Slider(0.0:0.001:𝑤; default=0, show_value=true))
 
-To efficiently estimate object exterior surface for the heuristic and avoid storing for every point, we can interpolate interior points at regular intervals, $\Delta \mathbf{p}$, between the object's start and end points. The start and end points within the selected region can be interpreted to be the mean of interior and exterior surfaces at the two extreme lengths. Note that these points can also be given externally; we are averaging here so that no extra data is required from the user for this demo.
+To efficiently estimate object exterior surface for the heuristic and avoid storing for every point, we can interpolate interior points at regular intervals, $\Delta \mathbf{p}$, between the object's start and end points. The start and end points within the selected region can be interpreted to be the mean of interior and exterior surfaces at the two extreme lengths. Note that these points can also be given externally; we are averaging here so that no extra data is required from the user for this demo. For the same reason, it is desirable to have a small curvature so that all object points lie below the linear approximation of the section; CORRECT OBJECT ORIENTATION CAPTURED IN THE PIECEWISE LINEAR APPROX.
 
 Interpolation interval, $||\Delta \mathbf{p}||$ =
-$(@bind Δp Slider(0.01:0.01:ℓ/8; default=0.05, show_value=true))
+$(@bind Δp Slider(0.01:0.01:0.15; default=0.05, show_value=true))
 
 "
 
 # ╔═╡ 754bbfc0-4ded-11eb-3719-d16818482c28
 begin
 	# create environment map
-	res = 1e-3; high = 100.0; low = 0.0; und = Inf64 # map parameters
-	fₑ = x -> a * res * x^2 + b * res * x + (c / res) 			 # exterior surface function
-	fᵢ = x -> ã * res* x^2 + b̃ * x + (c̃ / res) 			# interior surface function
+	res = 1e-3; high = 100.0; low = 0.0; und = Inf64 			 # map parameters
+	aₑ, aᵢ = (a, ã) .* res; bₑ, bᵢ, cₑ, cᵢ = (b, b̃, c, c̃) ./ res # in approx map units
+	fₑ = x -> aₑ * (x - bₑ)^2 + cₑ 	# exterior surface function
+	fᵢ = x -> aᵢ * (x - bᵢ)^2 + cᵢ 	# interior surface function
 	env_map = generate_map(ℓ, 𝑤, fₑ; g=fᵢ, res=res, high=high, low=low, und=und)
 
 	# start/end pts: if fᵢ ≥ fₑ then take extreme point to be ||Δp|| units below fₑ
@@ -143,7 +144,7 @@ begin
 			if checkbounds(Bool, env_map.map, y, x)]	# obj points in map coords
 
 	# object section frame {𝑂} and object points wrt {𝑂}
-	p₁ = ᵐobj_pts[1]								# first object point wrt map
+	p₁ = isempty(ᵐobj_pts) ? Point2(1, 1) : ᵐobj_pts[1] # first object point wrt map
 	ᵐξₒ= Pose2(p₁.x, p₁.y, θₒ; name="object_frame")	# map to {𝑂} relative pose
 	𝑂 	= Frame2(ᵐξₒ)							 	 # object frame (wrt map)
 	ᵒobj_pts = [(- ᵐξₒ) ⋅ ᵐp for ᵐp ∈ ᵐobj_pts]		# obj points wrt {𝑂}
@@ -237,12 +238,15 @@ end
 # ╔═╡ 3723d85e-4e33-11eb-0ed4-1328588c58aa
 # call upper function and plot
 
+# ╔═╡ 460817ea-4ed3-11eb-09ce-35602807c6f4
+𝑑ₚ
+
 # ╔═╡ Cell order:
 # ╟─3bda4224-4970-11eb-29ac-091d674c6763
 # ╟─50f53aaa-49f5-11eb-0d5a-cb3e9c45649a
 # ╠═701ff10c-4a1d-11eb-0b65-59b45daa23c2
 # ╟─e6de0e36-496f-11eb-32e9-7f92c36296a3
-# ╠═7307a8e6-4dde-11eb-26cb-6bdd3881b940
+# ╟─7307a8e6-4dde-11eb-26cb-6bdd3881b940
 # ╠═754bbfc0-4ded-11eb-3719-d16818482c28
 # ╠═51175c8e-4df1-11eb-057e-4741292fbe95
 # ╠═98d7802a-4e65-11eb-2e34-abd3d757a2be
@@ -252,3 +256,4 @@ end
 # ╠═29bd8490-4e32-11eb-38b4-436ddc96af5a
 # ╠═a3f57948-4970-11eb-25f0-0d3d60aa888e
 # ╠═3723d85e-4e33-11eb-0ed4-1328588c58aa
+# ╠═460817ea-4ed3-11eb-09ce-35602807c6f4
