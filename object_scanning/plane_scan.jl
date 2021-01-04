@@ -17,6 +17,9 @@ end
 begin
 	include("misc_utils.jl");
 	using PlutoUI;
+	using Plots;
+	using Statistics;
+	using LinearAlgebra;
 end
 
 # ╔═╡ 50f53aaa-49f5-11eb-0d5a-cb3e9c45649a
@@ -71,8 +74,8 @@ end
 # ╔═╡ e6de0e36-496f-11eb-32e9-7f92c36296a3
 md"
 
-# Heuristic evaluation utils
-To scan a 2D slice of an object, we first need to define a desired padding distance from the surface, 𝑑ₚ. In order to inform the path planner about this criterion, a heuristic needs to be constructed. A simple quadratic penalty method, penalizing a point based on its norm from the padded curve, can help the final plan converge to the desired scanning profile.
+# Heuristic evaluation
+To scan a 2D slice of an object, we first need to define a desired padding distance, 𝑑ₚ, from the surface. Based on this distance, a heuristic can be constructed to inform the path planner about this criterion. A simple quadratic penalty method, penalizing a point based on its norm from the padded curve, can help the final plan converge to the desired scanning profile. Note that the scanning profile is going to be different from the padding profile, which does not take obstacles and kinodynamic constraints into account.
 
 "
 
@@ -80,24 +83,103 @@ To scan a 2D slice of an object, we first need to define a desired padding dista
 md"
 
 ## Piecewise Linear Approximation
-We can divide an arbitrary, curved object into sections and treat each of them as 
+We can divide an arbitrary, curved object into linear sections and run the penalty heuristic separately on all sections to get the complete padding profile. To define such a section, we can specify the length and width for the region we want to investigate along with the padding distance and exterior and interior surface functions defining the object in this region.
 
 Length, `ℓ` = 
 $(@bind ℓ Slider(0.5:0.01:2.5; default=1.5, show_value=true))
 
 Width, `𝑤` = 
-$(@bind 𝑤 Slider(0.2:0.01:1.5; default=0.75, show_value=true))
+$(@bind 𝑤 Slider(0.2:0.01:1.5; default=0.5, show_value=true))
 
 Scan padding distance, `𝑑ₚ` =
 $(@bind 𝑑ₚ Slider(0.25:0.01:√2𝑤; default=round(3*√2𝑤/4; digits=2), show_value=true))
 
-surface = x -> 2 * sin(0.05x) + 0.12x
-bottom = ;
-A slider for their slopes, so that I can offset and move the aisle around.
+Exterior surface, $f_e(x) = ab \cdot \sin(0.05x) + bx + c$
 
-Plot map and the mod points at Δpose.
+𝑎 = 
+$(@bind a Slider(1:0.01:30; default=18.75, show_value=true)), 
+𝑏 = 
+$(@bind b Slider(0.0:0.01:2.0; default=0.12, show_value=true)), 
+𝑐 =
+$(@bind c Slider(-𝑤:0.01:𝑤; default=0.03, show_value=true))
+
+Interior surface, $f_i(x) = \tilde{a}\tilde{b} \cdot \cos(0.05x) + \tilde{b}x + \tilde{c}$
+
+𝑎̃ = 
+$(@bind ã Slider(0:0.01:10; default=0, show_value=true)), 
+𝑏̃ = 
+$(@bind b̃ Slider(0.0:0.01:1.2; default=b, show_value=true)), 
+𝑐̃ =
+$(@bind c̃ Slider(-𝑤:0.01:𝑤; default=0, show_value=true))
+
+To efficiently estimate object exterior surface for the heuristic and avoid storing for every point, we can interpolate interior points at regular intervals, $\Delta \mathbf{p}$, between the object's start and end points. The start and end points within the selected region can be interpreted to be the mean of interior and exterior surfaces at the two extreme lengths. Note that these points can also be given externally; we are averaging here so that no extra data is required from the user for this demo.
+
+Interpolation interval, $||\Delta \mathbf{p}||$ =
+$(@bind Δp Slider(0.01:0.01:ℓ/8; default=0.05, show_value=true))
 
 "
+
+# ╔═╡ 754bbfc0-4ded-11eb-3719-d16818482c28
+begin
+	# create environment map
+	res = 1e-3; high = 100.0; low = 0.0; und = Inf64 # map parameters
+	fₑ = x -> a * b * sin(0.05x) + b * x + (c / res) # exterior surface function
+	fᵢ = x -> ã * b̃ * cos(0.05x) + b̃ * x + (c̃ / res) # interior surface function
+	env_map = generate_map(ℓ, 𝑤, fₑ; g=fᵢ, res=res, high=high, low=low, und=und)
+
+	# interpolate obj: if fᵢ ≥ fₑ then take extreme point to be ||Δp|| units below fₑ
+	xₛ, xₑ = 1, ℓ / res
+	yₛ = fₑ(xₛ) > fᵢ(xₛ) ? mean([fₑ(xₛ) fᵢ(xₛ)]) : fₑ(xₛ) - (Δp / res)
+	yₑ = fₑ(xₑ) > fᵢ(xₑ) ? mean([fₑ(xₑ) fᵢ(xₑ)]) : fₑ(xₑ) - (Δp / res)
+	θₒ      = atan(yₑ - yₛ, xₑ - xₛ) 					# θ = tan⁻¹(Δy/Δx); obj angle
+	Δx, Δy 	= (Δp * cos(θₒ)) / res, (Δp * sin(θₒ)) / res# Δx and Δy in map coordinates 
+	x_pts, y_pts = [xₛ:Δx:xₑ; xₑ], [yₛ:Δy:yₑ; yₑ]		# unfiltered obj x, y coords
+	obj_pts = [Point2(x, y) for (x, y) ∈ zip(x_pts, y_pts)
+			if (1,1) ≤ (y, x) ≤ size(env_map.map)]		# obj points in map coords
+
+	# plot
+	plot_map(env_map)
+	plot_points(obj_pts)
+end
+
+# ╔═╡ 51175c8e-4df1-11eb-057e-4741292fbe95
+md"
+
+### Boundary approximation
+To get an approximate padding profile, we first need to get the boundary of the aisle. Although, we have, in real life we would not have an object defined as a function, but we can expect a map of the environment with obstacle information. To efficiently check, we do it in increments of some check distance.
+
+Boundary check distance, `𝑑ₖ` =
+$(@bind 𝑑ₖ Slider(0.001:0.001:Δp; default=0.01, show_value=true))
+
+We can then keep adding the normal vector scaled by 𝑑ₖ to get to the boundary. Let this vector be called the check vector, $\mathbf{\Delta c}$.
+"
+
+# ╔═╡ aeadbe7e-4e35-11eb-1f95-67a0b327f61a
+begin
+	ᵐξₒ = Pose2(0, 0, θₒ, name="object_frame") # object frame {𝑂} relative pose
+	ᵒobj_pts = [(- ᵐξₒ) ⋅ ᵐp for ᵐp ∈ obj_pts]
+	# attach object frame to the start point (xₛ, yₛ, θₒ) and make Δp a vector wrt 
+	# frame {𝑂}. Everything good by default. This will work in general.
+	# make a map_value() accessor in misc_utils.
+	# Δc = Vector2(0, 𝑑ₖ, 𝑂)	 # check vector wrt object frame
+	# check vector wrt object frame: for easier lookup of closest indices.
+	# get map point wrt object frame, get x coord directly (equals projection)
+end
+
+# ╔═╡ db8bf968-4e2f-11eb-192b-8716d8109f4c
+md"
+
+## Wrapping up: heuristic lookup
+Finally to get all the points, we do this:
+1. Project point onto the unit vector of the object's section.
+2. Get closest point by getting closest computed frame's x or y from xₛ + NΔx. should also checkout with yₛ + NΔy
+3. Once we have this frame, then get frame's (cache this
+"
+
+# ╔═╡ 29bd8490-4e32-11eb-38b4-436ddc96af5a
+@inline function get_heuristic(user_point, obj_vec, boundary_pts)
+	#
+end
 
 # ╔═╡ a3f57948-4970-11eb-25f0-0d3d60aa888e
 # return heuristic per object point
@@ -106,17 +188,22 @@ Plot map and the mod points at Δpose.
 
 # mutates free space elements (low val)
 function evaluate_heuristic()
-    #
+    # iterate over map and get heuristic values for all points (within low points)
 end
 
-# ╔═╡ 9d2b16ce-4971-11eb-0172-997483dda6fb
-generate_map(ℓ, 𝑤, surface; g=bottom) |> plot_map
+# ╔═╡ 3723d85e-4e33-11eb-0ed4-1328588c58aa
+# call upper function and plot
 
 # ╔═╡ Cell order:
 # ╟─3bda4224-4970-11eb-29ac-091d674c6763
 # ╟─50f53aaa-49f5-11eb-0d5a-cb3e9c45649a
 # ╠═701ff10c-4a1d-11eb-0b65-59b45daa23c2
 # ╟─e6de0e36-496f-11eb-32e9-7f92c36296a3
-# ╠═7307a8e6-4dde-11eb-26cb-6bdd3881b940
+# ╟─7307a8e6-4dde-11eb-26cb-6bdd3881b940
+# ╠═754bbfc0-4ded-11eb-3719-d16818482c28
+# ╠═51175c8e-4df1-11eb-057e-4741292fbe95
+# ╠═aeadbe7e-4e35-11eb-1f95-67a0b327f61a
+# ╠═db8bf968-4e2f-11eb-192b-8716d8109f4c
+# ╠═29bd8490-4e32-11eb-38b4-436ddc96af5a
 # ╠═a3f57948-4970-11eb-25f0-0d3d60aa888e
-# ╠═9d2b16ce-4971-11eb-0172-997483dda6fb
+# ╠═3723d85e-4e33-11eb-0ed4-1328588c58aa

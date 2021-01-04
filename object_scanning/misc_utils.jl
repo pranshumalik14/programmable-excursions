@@ -10,6 +10,8 @@ using Parameters
 using LinearAlgebra
 using StaticArrays
 
+# !!todo:!! convert geometric entity to world frame before plotting
+
 # !!todo!!: compose pose with frame; sets frame as reference for pose automatically; will
 # have to involve 𝑊() as well since frames are wrt world, and if world is not set to 0 then
 # answers will be different
@@ -322,8 +324,8 @@ function plot_map(map::Map; Δx=0.5, Δy=0.2, xₛ=0.0, yₛ=0.1)
     ylabel!("Width (m)")
 end
 
-# plots a 2D geometric entity on map scale
-function plot_point(g::G₂, map::Map) where {G₂ <: GeometricEntity2D}
-    @unpack res = map
-    scatter!([(g.x / res)], [(g.y / res)], legend=false)
+# plots a 2D geometric entity as a point
+function plot_points(gs::Vector{G₂}; color::S="red") where
+    {G₂ <: GeometricEntity2D,S <: AbstractString}
+    scatter!(getfield.(gs, :x), getfield.(gs, :y), legend=false, color=color)
 end
