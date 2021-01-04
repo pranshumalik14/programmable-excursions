@@ -59,16 +59,14 @@ let
 	@assert ʷp ≈ (ʷξₗ ⊕ ˡξₕ) ⋅ ʰp 			   # check if composition returns same pt.
 
 	ʷξₗ = ʷξₗ ⊕ Pose2(0, 0, π/3; name=ʷξₗ.name, 𝑉=𝐿) # rotate base link by 60°
-	𝐿̂  = Frame2(ʷξₗ); 𝐻̂ = Frame2(ˡξₕ);			     # updated base and head frames
+	𝐿̂  = Frame2(ʷξₗ); ˡξₕ.𝑉 = 𝐿̂; 𝐻̂ = Frame2(ˡξₕ);	# updated base and head frames
 	ˡp̃  = (- ʷξₗ) ⋅ ʷp 			# get old point in new frame through world frame
 	ʰp̃  = (- ˡξₕ) ⋅ ˡp̃ 			 # get point in new head frame
 	ʷp̃  = ʷξₗ ⋅ ˡp̃ 				 # get point back in world frame from new base frame
 	@assert ʷp̃ ≈ (ʷξₗ ⊕ ˡξₕ) ⋅ ʰp̃  # check for correctness of composition
 	
 	# check if point remained the same wrt all reference frames
-	@assert ˡp ≈ ʰp ≈ ʷp ≈ ʷp̃ #≈ ʰp̃ ≈ ˡp̃
-	# @assert ʷp̃ ≈ ʰp̃
-	# @assert ʰp̃ ≈ ˡp̃
+	@assert ˡp ≈ ʰp ≈ ʷp ≈ ʷp̃ ≈ ʰp̃ ≈ ˡp̃
 
 	# show final results wrt world
 	with_terminal() do
@@ -141,8 +139,8 @@ begin
 	θₒ      = atan(yₑ - yₛ, xₑ - xₛ) 					# θ = tan⁻¹(Δy/Δx); obj angle
 	Δx, Δy 	= (Δp * cos(θₒ)) / res, (Δp * sin(θₒ)) / res# Δx and Δy in map coordinates
 	x_pts, y_pts = [xₛ:Δx:xₑ;], [yₛ:Δy:yₑ;]				# unfiltered obj x, y coords
-	ᵐobj_pts = [Point2(x, y) for (x, y) ∈ zip(x_pts, y_pts)
-			if (1,1) ≤ (y, x) ≤ size(env_map.map)]		# obj points in map coords
+	ᵐobj_pts = [Point2(x, y) for (x, y) ∈ zip(x_pts, y_pts) 
+			if checkbounds(Bool, env_map.map, y, x)]	# obj points in map coords
 
 	# object section frame {𝑂} and object points wrt {𝑂}
 	p₁ = ᵐobj_pts[1]								# first object point wrt map
