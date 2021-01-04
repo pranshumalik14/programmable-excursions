@@ -32,12 +32,12 @@ abstract type AbstractFrame <: GeometricEntity end
 abstract type AbstractPoint <: GeometricEntity end
 
 # holds 2D map and its properties to hold the (sliced) object and environment information
-@with_kw mutable struct Map{T <: Real,F <: Real}
-    map::Matrix{T}
-    low::T
-    high::T
-    und::T
-    res::F
+@with_kw mutable struct Map
+    map::Matrix{Real}
+    low::Real
+    high::Real
+    und::Real
+    res::Real
 end
 
 # represents a 2D frame, (implicitly) wrt world frame. a frame is immutable, and by
@@ -85,7 +85,7 @@ struct Zero2 <: AbstractPose
 end
 
 # returns a zero relative pose
-𝛰() = Zero2()
+𝑍() = Zero2()
 
 # type alias for union of all 2D geometric entities
 const GeometricEntity2D = Union{Pose2,Point2,Frame2,Zero2}
@@ -142,8 +142,15 @@ end
 
 # Point2 custom isapprox function
 function Base.isapprox(p₁::Point2, p₂::Point2)
-    @assert p₁.𝑉.name == p₂.𝑉.name
-    return p₁.x ≈ p₂.x && p₁.y ≈ p₂.y
+    if p₁.𝑉.name == p₂.𝑉.name
+        # direct comparison for same ref frame
+        return p₁.x ≈ p₂.x && p₁.y ≈ p₂.y
+    else
+        # convert ᵛp₂ to reference frame of ᵘp₁ before direct comparison
+        ᵘξᵥ = (- Pose2(𝑈=p₁.𝑉)) ⊕ Pose2(𝑈=p₂.𝑉) # ᵘξᵥ = ⊖ ʷξᵤ ⊕ ʷξᵥ
+        p̃₂  = ᵘξᵥ ⋅ p₂
+        return p₁.x ≈ p̃₂.x && p₁.y ≈ p̃₂.y
+    end
 end
 
 
@@ -152,8 +159,8 @@ Pose and point operations and algebra:
 1. ᵗξᵤ ⊕ ᵘξᵥ = ᵗξᵥ
 2. ξ₁ ⊕ ξ₂ ≠ ξ₂ ⊕ ξ₁
 3. ⊖ ᵗξᵤ = ᵘξₜ
-4. ξ ⊖ ξ = 𝛰; ⊖ ξ ⊕ ξ = 𝛰
-5. ξ ⊖ 𝛰 = ξ; ξ ⊕ 𝛰 = ξ
+4. ξ ⊖ ξ = 𝑂; ⊖ ξ ⊕ ξ = 𝑂
+5. ξ ⊖ 𝑂 = ξ; ξ ⊕ 𝑂 = ξ
 6. ᵗξᵤ ⋅ ᵘp = ᵗp
 """
 
@@ -165,7 +172,7 @@ function ⊕(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2})
         return ξ₁
     else
         @assert ξ₁.𝑈.name == ξ₂.𝑉.name
-        if (ξ₁.𝑉.name == ξ₂.𝑈.name) return 𝛰() end
+        if (ξ₁.𝑉.name == ξ₂.𝑈.name) return 𝑍() end
         x, y, θ = compose2(@SVector([ξ₁.x, ξ₁.y, ξ₁.θ]), @SVector([ξ₂.x, ξ₂.y, ξ₂.θ]))
         𝑈 = Frame2(x, y, θ, ξ₂.name)
         return Pose2(𝑈, ξ₁.𝑉) # todo: check if this is same as Pose2(x₁ + x₂, y₁ + y₂, θ₁ + θ₂)
@@ -280,7 +287,7 @@ end
 
 
 """
-Map setup utils
+Map setup and query utils
 """
 
 # returns a matrix of size w/res × l/res, filling elements between and including the two
@@ -304,6 +311,19 @@ function generate_map(l::Real, w::Real, f::Function; g::Function=zero, res=1e-3,
     end
 
     return Map(map, low, high, und, res)
+end
+
+# returns the map data at the closest integer index [y, x]; if out of bounds, then assumed
+# to be unobstructed and returns map.low
+function map_value(x::Real, y::Real, map::Map)
+    @unpack low, map = map
+    x, y = (x, y) .|> round .|> Int
+
+    if checkbounds(Bool, map, y, x)
+        return @inbounds map[y, x]
+    else
+        return low
+    end
 end
 
 
