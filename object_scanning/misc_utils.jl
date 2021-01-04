@@ -146,11 +146,6 @@ end
 
 # Point2 custom isapprox function
 function Base.isapprox(p₁::Point2, p₂::Point2)
-    @show p₁
-    @show p₂
-    @show p₁.𝑉
-    @show p₂.𝑉
-
     if p₁.𝑉.name == p₂.𝑉.name
         # direct comparison for same ref frame
         return p₁.x ≈ p₂.x && p₁.y ≈ p₂.y
@@ -158,10 +153,6 @@ function Base.isapprox(p₁::Point2, p₂::Point2)
         # convert ᵛp₂ to reference frame of ᵘp₁ before direct comparison
         ᵘξᵥ = (- Pose2(𝑈=p₁.𝑉)) ⊕ Pose2(𝑈=p₂.𝑉) # ᵘξᵥ = ⊖ ʷξᵤ ⊕ ʷξᵥ
         p̃₂  = ᵘξᵥ ⋅ p₂
-        @show p₁
-        @show p̃₂
-        @show p₁.𝑉
-        @show p̃₂.𝑉
         return p₁.x ≈ p̃₂.x && p₁.y ≈ p̃₂.y
     end
 end

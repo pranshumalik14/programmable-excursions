@@ -97,7 +97,7 @@ $(@bind 𝑤 Slider(0.2:0.01:1.5; default=0.5, show_value=true))
 Scan padding distance, `𝑑ₚ` =
 $(@bind 𝑑ₚ Slider(0.25:0.01:√2𝑤; default=round(3*√2𝑤/4; digits=2), show_value=true))
 
-Exterior surface, $f_e(x) = ab \cdot \sin(0.05x) + bx + c$
+Exterior surface, $f_e(x) = ax^2 + bx + c$
 
 𝑎 =
 $(@bind a Slider(1:0.01:30; default=18.75, show_value=true)),
@@ -106,7 +106,7 @@ $(@bind b Slider(0.0:0.01:2.0; default=0.12, show_value=true)),
 𝑐 =
 $(@bind c Slider(-𝑤:0.01:𝑤; default=0.03, show_value=true))
 
-Interior surface, $f_i(x) = \tilde{a}\tilde{b} \cdot \cos(0.05x) + \tilde{b}x + \tilde{c}$
+Interior surface, $f_i(x) = \tilde{a}x^2 + \tilde{b}x + \tilde{c}$
 
 𝑎̃ =
 $(@bind ã Slider(0:0.01:10; default=0, show_value=true)),
@@ -126,8 +126,8 @@ $(@bind Δp Slider(0.01:0.01:ℓ/8; default=0.05, show_value=true))
 begin
 	# create environment map
 	res = 1e-3; high = 100.0; low = 0.0; und = Inf64 # map parameters
-	fₑ = x -> a * b * sin(0.05x) + b * x + (c / res) # exterior surface function
-	fᵢ = x -> ã * b̃ * cos(0.05x) + b̃ * x + (c̃ / res) # interior surface function
+	fₑ = x -> a * res * x^2 + b * res * x + (c / res) 			 # exterior surface function
+	fᵢ = x -> ã * res* x^2 + b̃ * x + (c̃ / res) 			# interior surface function
 	env_map = generate_map(ℓ, 𝑤, fₑ; g=fᵢ, res=res, high=high, low=low, und=und)
 
 	# start/end pts: if fᵢ ≥ fₑ then take extreme point to be ||Δp|| units below fₑ
@@ -242,7 +242,7 @@ end
 # ╟─50f53aaa-49f5-11eb-0d5a-cb3e9c45649a
 # ╠═701ff10c-4a1d-11eb-0b65-59b45daa23c2
 # ╟─e6de0e36-496f-11eb-32e9-7f92c36296a3
-# ╟─7307a8e6-4dde-11eb-26cb-6bdd3881b940
+# ╠═7307a8e6-4dde-11eb-26cb-6bdd3881b940
 # ╠═754bbfc0-4ded-11eb-3719-d16818482c28
 # ╠═51175c8e-4df1-11eb-057e-4741292fbe95
 # ╠═98d7802a-4e65-11eb-2e34-abd3d757a2be
