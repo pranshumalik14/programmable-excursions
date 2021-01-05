@@ -27,7 +27,7 @@ md"
 
 # Pose algebra
 
-We can operate on poses and points by the following rules:
+We can operate on poses and points by following these rules:
 - Pose addition/composition: ${^T\mathbf{\xi}_U} \oplus {^U\mathbf{\xi}_V} = {^T\mathbf{\xi}_V}$
 - Non-commutative composition, order matters: $\mathbf{\xi}_1 \oplus \mathbf{\xi}_2 \neq \mathbf{\xi}_2 \oplus \mathbf{\xi}_1$
 - Additive inverse of a pose: $\ominus {^T\mathbf{\xi}_U} = {^U\mathbf{\xi}_T}$
@@ -113,9 +113,9 @@ $(@bind ã Slider(-a:0.001:a; default=0, show_value=true)),
 𝑏̃ =
 $(@bind b̃ Slider(0.0:0.001:ℓ; default=ℓ/2, show_value=true)),
 𝑐̃ =
-$(@bind c̃ Slider(0.0:0.001:𝑤; default=0, show_value=true))
+$(@bind c̃ Slider(0.0:0.001:c; default=0, show_value=true))
 
-To efficiently estimate object exterior surface for the heuristic and avoid storing for every point, we can interpolate interior points at regular intervals, $\Delta \mathbf{p}$, between the object's start and end points. The start and end points within the selected region can be interpreted to be the mean of interior and exterior surfaces at the two extreme lengths. Note that these points can also be given externally; we are averaging here so that no extra data is required from the user for this demo. For the same reason, it is desirable to have a small curvature so that all object points lie below the linear approximation of the section; CORRECT OBJECT ORIENTATION CAPTURED IN THE PIECEWISE LINEAR APPROX.
+To efficiently estimate object exterior surface for the heuristic and avoid storing every surface point, we can sample the exterior surface points at regular intervals, $\Delta \mathbf{p}$, between the object's start and end points. The start and end points within the selected region can be interpreted to be the mean of interior and exterior surfaces at the two extreme lengths. Note that these points can also be given externally; we are averaging here so that no extra data is required from the user for this demo. For the same reason, it is desirable to have a small curvature so that the linearized section of the object (interpolated points) lies below the exterior surface of the section.
 
 Interpolation interval, $||\Delta \mathbf{p}||$ =
 $(@bind Δp Slider(0.01:0.01:0.15; default=0.05, show_value=true))
@@ -162,12 +162,14 @@ end
 md"
 
 ### Boundary approximation
-To get an approximate padding profile, we first need to get the boundary of the aisle. Although, we have, in real life we would not have an object defined as a function, but we can expect a map of the environment with obstacle information. To efficiently check, we do it in increments of some check distance.
+To get an approximate padding profile, we first need to get the boundary of the object. Although we already have functions for the surfaces to give us that information, but in real life we would not have an object defined as a function and can expect a discrete map of the environment with obstacle information. To efficiently get the boundary points, we can take steps normal to the linear object profile, in increments of some check distance 𝑑ₖ, till we reach a free location. And that location will be the corresponding boundary point.
 
 Boundary check distance, `𝑑ₖ` =
 $(@bind 𝑑ₖ Slider(0.001:0.001:Δp/2; default=0.01, show_value=true))
 
-We can then keep adding the normal vector scaled by 𝑑ₖ to get to the boundary. Let this vector be called the check vector, $\mathbf{\Delta c}$.
+We can then keep adding a vector that has magnitude 𝑑ₖ and is normal to the linear object profile to get to the boundary. Let this vector be called the check vector, $\mathbf{\Delta c}$.
+
+Further, to approximate the local curvature between two consecutive boundary points, we can rotate the first pose to orient its \"boundary\" axis towards the next pose's origin. This way we can translate these boundary poses along normal to the \"boundary\" axis to get the corresponding points on the padding profile.
 
 "
 
@@ -217,11 +219,12 @@ end
 md"
 
 ## Heuristic lookup
-Finally to get all the points, we do this:
-1. Project point onto the unit vector of the object's section.
-2. Get closest point by getting closest computed frame's x or y from xₛ + NΔx
-3. Once we have this frame, then get frame's…
+Finally, with the boundary information, we can calculate the penalty heuristic at a free point on the map by the following steps:
 
+1. Convert map point from map (world) frame to the object profile frame.
+2. Get the closest boundary pose by calculating the closest pose index, $𝑁 + 1$, for which the map point's projected component (along the object profile) matches that of the corresponding boundary pose, i.e, $x_{\text{map}} \approx x_{\text{start}} + N \cdot \Delta x$.
+3. Translate the correpsonding boundary pose by a padding vector, $\Delta \mathbf{d_p}$, normal to the boundary axis to get the pose on the padding profile.
+4. Get the distance between the map and padding profile points (both in the reference frame of the object profile) and normalize the result by $||\Delta \mathbf{d_p}||$.
 "
 
 # ╔═╡ 29bd8490-4e32-11eb-38b4-436ddc96af5a
@@ -248,7 +251,7 @@ end
 md"
 
 ## Wrapping up
-Fixed axis (aspect ratio) and full plot.
+To see the trend of this heuristic function and if it matches the desired padding profile, we can evaluate all free spots on the map and plot the result.
 
 "
 
@@ -280,11 +283,11 @@ end
 # ╟─e6de0e36-496f-11eb-32e9-7f92c36296a3
 # ╟─7307a8e6-4dde-11eb-26cb-6bdd3881b940
 # ╠═754bbfc0-4ded-11eb-3719-d16818482c28
-# ╠═51175c8e-4df1-11eb-057e-4741292fbe95
+# ╟─51175c8e-4df1-11eb-057e-4741292fbe95
 # ╠═98d7802a-4e65-11eb-2e34-abd3d757a2be
 # ╠═aeadbe7e-4e35-11eb-1f95-67a0b327f61a
 # ╠═aa19d822-4e65-11eb-0a43-05ff6cd19730
-# ╠═db8bf968-4e2f-11eb-192b-8716d8109f4c
+# ╟─db8bf968-4e2f-11eb-192b-8716d8109f4c
 # ╠═29bd8490-4e32-11eb-38b4-436ddc96af5a
 # ╟─5e9f22de-4eed-11eb-0922-530a756fabd4
 # ╠═a3f57948-4970-11eb-25f0-0d3d60aa888e
