@@ -127,7 +127,7 @@ begin
 	# create environment map
 	res = 1e-3; high = 1.25; low = 0.0; und = Inf64 			 # map parameters
 	aₑ, aᵢ = (a, ã) .* res; bₑ, bᵢ, cₑ, cᵢ = (b, b̃, c, c̃) ./ res # in approx map units
-	fₑ = x -> aₑ * (x - bₑ)^2 + cₑ 	# exterior surface function
+	fₑ = x -> aₑ * (x - bₑ)^2 + cₑ	# exterior surface function
 	fᵢ = x -> aᵢ * (x - bᵢ)^2 + cᵢ 	# interior surface function
 	env_map = generate_map(ℓ, 𝑤, fₑ; g=fᵢ, res=res, high=high, low=low, und=und)
 
@@ -151,7 +151,7 @@ begin
 	ᵒΔp      = Vector2(Δp / res, 0, 𝑂) 			 # interp interval vector in {𝑂}
 
 	# padding transform (translation along frame/pose orientation)
-	Δdₚ = Pose2(0, 𝑑ₚ / res, 0) # in map units 
+	Δdₚ = Pose2(0, 𝑑ₚ / res, 0) # in map units
 	
 	# plot
 	plot_map(env_map)
@@ -169,7 +169,7 @@ $(@bind 𝑑ₖ Slider(0.001:0.001:Δp/2; default=0.01, show_value=true))
 
 We can then keep adding a vector that has magnitude 𝑑ₖ and is normal to the linear object profile to get to the boundary. Let this vector be called the check vector, $\mathbf{\Delta c}$.
 
-Further, to approximate the local curvature between two consecutive boundary points, we can rotate the first pose to orient its \"boundary\" axis towards the next pose's origin. This way we can translate these boundary poses along normal to the \"boundary\" axis to get the corresponding points on the padding profile.
+Further, to approximate the local curvature between two consecutive boundary points, we can rotate the first pose to orient its \"boundary\" axis towards the next pose's origin. This way we can translate these boundary poses along normal to the \"boundary\" axis to get the corresponding points on the padding profile. The last object pose can have the same orientation as the previous pose.
 
 "
 
@@ -184,27 +184,28 @@ function get_boundary_poses(ᵒobj_pts::Vector{Point2}, map::Map)
 	# translate object pts by check vector to reach boundary pts
 	for ᵒpᵢ ∈ ᵒobj_pts
 		ᵐpᵢ = ᵐξₒ ⋅ ᵒpᵢ
-
 		while map_value(ᵐpᵢ.x, ᵐpᵢ.y, map) ≠ map.low
 			ᵒpᵢ += ᵒΔc 		# increment object point
 			ᵐpᵢ = ᵐξₒ ⋅ ᵒpᵢ # update map point
 		end
-
-		# if last step resulted in going out of map, then take one step back
 		if !checkbounds(Bool, map.map, ᵐpᵢ.y, ᵐpᵢ.x)
-			ᵒpᵢ += (- ᵒΔc)
+			ᵒpᵢ += (- ᵒΔc) # if went out of map with last step: take one step back
 		end
-		
 		push!(boundary_poses, Pose2(ᵒpᵢ.x, ᵒpᵢ.y, 0; 𝑉=𝑂)) # transl component only
 	end
 
-	# rotate boundary pose to orient itself towards next boundary pose (capturing
+	# rotate boundary pose to orient itself towards next boundary pose; except for
+	# the last pose, where its orientation is be the same as previous pose (capturing
 	# local curve in object boundary)
-	for i ∈ 1:(length(boundary_poses) - 1)
+	n = length(boundary_poses)
+	for i ∈ 1:(n - 1)
 		ᵒξᵢ, ᵒξᵢ₊₁ = boundary_poses[i:(i + 1)]
 		θᵢ = atan(ᵒξᵢ₊₁.y - ᵒξᵢ.y, ᵒξᵢ₊₁.x - ᵒξᵢ.x)
 		boundary_poses[i] = ᵒξᵢ ∘ Pose2(0, 0, θᵢ)
 	end
+	ᵒξₙ 	= last(boundary_poses)
+	θₙ₋₁ 	= (n > 1) ? boundary_poses[n - 1].θ : 0
+	boundary_poses[n] = ᵒξₙ ∘ Pose2(0, 0, θₙ₋₁)
 
 	return boundary_poses
 end
@@ -221,10 +222,12 @@ md"
 ## Heuristic lookup
 Finally, with the boundary information, we can calculate the penalty heuristic at a free point on the map by the following steps:
 
-1. Convert map point from map (world) frame to the object profile frame.
+1. Convert map point from map (world) frame, $^W\mathbf{p}_M$, to the object profile frame, $^O\mathbf{p}_M$.
 2. Get the closest boundary pose by calculating the closest pose index, $𝑁 + 1$, for which the map point's projected component (along the object profile) matches that of the corresponding boundary pose, i.e, $x_{\text{map}} \approx x_{\text{start}} + N \cdot \Delta x$.
-3. Translate the correpsonding boundary pose by a padding vector, $\Delta \mathbf{d_p}$, normal to the boundary axis to get the pose on the padding profile.
-4. Get the distance between the map and padding profile points (both in the reference frame of the object profile) and normalize the result by $||\Delta \mathbf{d_p}||$.
+3. Translate the correpsonding boundary pose by a padding vector, $\Delta \mathbf{d_p}$, normal to the boundary axis to get the pose on the padding profile, $^O\mathbf{\xi}_P$.
+4. Convert the map point in object frame, $^O\mathbf{p}_M$, to the padding profile pose frame, $\{P\}$, to get $^P\mathbf{p}_M$. The resulting point's $y$ coordinate is its displacement from the piecewise-linear boundary and $|y|$ can be regarded as the penalty distance.
+5. Normalize result by $||\Delta \mathbf{d_p}||$ and return.
+
 "
 
 # ╔═╡ 29bd8490-4e32-11eb-38b4-436ddc96af5a
@@ -240,11 +243,14 @@ Finally, with the boundary information, we can calculate the penalty heuristic a
 	get_idx = x -> (0 ≤ x) ? min(length(boundary_poses), x + 1) : 1
 	𝑁 = (ᵒpₘ.x / ᵒΔp.x) |> round |> Int |> get_idx
 	
-	# get corresponding point on padding profile, ᵒpₚ
-	ᵒpₚ = boundary_poses[𝑁] ∘ Δdₚ |> Point2 # translate boundary pose by Δdₚ
+	# get corresponding pose on padding profile, ᵒξₚ
+	ᵒξₚ = boundary_poses[𝑁] ∘ Δdₚ
 	
-	# return penalty norm (normalized it to 𝑑ₚ in map units)
-	return norm(ᵒpₘ - ᵒpₚ) / norm(Δdₚ)
+	# convert map point wrt object frame to padding profile pose frame
+	ᵖpₘ = (- ᵒξₚ) ⋅ ᵒpₘ
+	
+	# return penalty distance (normalized it to 𝑑ₚ in map units)
+	return abs(ᵖpₘ.y) / norm(Δdₚ)
 end
 
 # ╔═╡ 5e9f22de-4eed-11eb-0922-530a756fabd4
