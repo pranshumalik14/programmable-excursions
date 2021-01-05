@@ -55,7 +55,7 @@ end
     name::AbstractString
 end
 
-# returns a world coordinate frame at origin set to (x,y,θ) (0,0,0)
+# returns a world coordinate frame at origin set to (x,y,θ) = (0,0,0)
 𝑊() = Frame2(0, 0, 0, "world")
 
 # holds 2D point information; a 2D bounded vector wrt frame {𝑉}
@@ -144,7 +144,7 @@ function Base.getproperty(ξ::P, field::Symbol) where {P <: Union{Pose2,Zero2}}
     end
 end
 
-# Point2 custom isapprox function
+# Point2 custom isapprox (≈) function
 function Base.isapprox(p₁::Point2, p₂::Point2)
     if p₁.𝑉.name == p₂.𝑉.name
         # direct comparison for same ref frame
@@ -299,7 +299,7 @@ Map setup and query utils
 # value and below g is filled with the undefined value. note: g(x) ≤ f(x) for int x in 1:n
 # and the arguments length (l), width (w), and resolution (res) are in meters.
 function generate_map(l::Real, w::Real, f::Function; g::Function=zero, res=1e-3, low=0.0,
-    high=1.0, und=Inf64)
+    high=10.0, und=Inf64)
     # get map dims; initialize map to free space
     @assert (res ≤ l) && (res ≤ w)
     m, n = (w / res, l / res) .|> round .|> Int

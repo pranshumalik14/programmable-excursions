@@ -95,7 +95,7 @@ Width, `𝑤` =
 $(@bind 𝑤 Slider(0.2:0.01:1.5; default=0.5, show_value=true))
 
 Scan padding distance, `𝑑ₚ` =
-$(@bind 𝑑ₚ Slider(0.25:0.01:√2𝑤; default=round(3*√2𝑤/4; digits=2), show_value=true))
+$(@bind 𝑑ₚ Slider(0.1:0.01:0.3; default=0.2, show_value=true))
 
 Exterior surface, $f_e(x) = a(x-b)^2 + c$
 
@@ -125,7 +125,7 @@ $(@bind Δp Slider(0.01:0.01:0.15; default=0.05, show_value=true))
 # ╔═╡ 754bbfc0-4ded-11eb-3719-d16818482c28
 begin
 	# create environment map
-	res = 1e-3; high = 100.0; low = 0.0; und = Inf64 			 # map parameters
+	res = 1e-3; high = 1.25; low = 0.0; und = Inf64 			 # map parameters
 	aₑ, aᵢ = (a, ã) .* res; bₑ, bᵢ, cₑ, cᵢ = (b, b̃, c, c̃) ./ res # in approx map units
 	fₑ = x -> aₑ * (x - bₑ)^2 + cₑ 	# exterior surface function
 	fᵢ = x -> aᵢ * (x - bᵢ)^2 + cᵢ 	# interior surface function
@@ -150,6 +150,9 @@ begin
 	ᵒobj_pts = [(- ᵐξₒ) ⋅ ᵐp for ᵐp ∈ ᵐobj_pts]		# obj points wrt {𝑂}
 	ᵒΔp      = Vector2(Δp / res, 0, 𝑂) 			 # interp interval vector in {𝑂}
 
+	# padding transform (translation along frame/pose orientation)
+	Δdₚ = Pose2(0, 𝑑ₚ / res, 0) # in map units 
+	
 	# plot
 	plot_map(env_map)
 	plot_points(ᵐobj_pts)
@@ -162,7 +165,7 @@ md"
 To get an approximate padding profile, we first need to get the boundary of the aisle. Although, we have, in real life we would not have an object defined as a function, but we can expect a map of the environment with obstacle information. To efficiently check, we do it in increments of some check distance.
 
 Boundary check distance, `𝑑ₖ` =
-$(@bind 𝑑ₖ Slider(0.001:0.001:Δp; default=0.01, show_value=true))
+$(@bind 𝑑ₖ Slider(0.001:0.001:Δp/2; default=0.01, show_value=true))
 
 We can then keep adding the normal vector scaled by 𝑑ₖ to get to the boundary. Let this vector be called the check vector, $\mathbf{\Delta c}$.
 
@@ -172,7 +175,7 @@ We can then keep adding the normal vector scaled by 𝑑ₖ to get to the bounda
 ᵒΔc = Vector2(0, 𝑑ₖ / res, 𝑂) # check vector in {𝑂}; normal to ᵒΔp
 
 # ╔═╡ aeadbe7e-4e35-11eb-1f95-67a0b327f61a
-# returns vector of relative poses for boundary pts, given the object pts wrt {𝑂}
+# returns vector of relative poses for boundary pts given the object pts wrt {𝑂}
 function get_boundary_poses(ᵒobj_pts::Vector{Point2}, map::Map)
 	boundary_poses = Vector{Pose2}()
 
@@ -206,40 +209,69 @@ end
 
 # ╔═╡ aa19d822-4e65-11eb-0a43-05ff6cd19730
 begin
-	ᵒbps = get_boundary_poses(ᵒobj_pts, env_map)
-	plot_points([ᵐξₒ ⋅ Point2(ξ) for ξ ∈ ᵒbps]; color="green")
+	ᵒboundary_poses = get_boundary_poses(ᵒobj_pts, env_map)
+	plot_points([ᵐξₒ ⋅ Point2(ξ) for ξ ∈ ᵒboundary_poses]; color="green")
 end
 
 # ╔═╡ db8bf968-4e2f-11eb-192b-8716d8109f4c
 md"
 
-## Wrapping up: heuristic lookup
+## Heuristic lookup
 Finally to get all the points, we do this:
 1. Project point onto the unit vector of the object's section.
-2. Get closest point by getting closest computed frame's x or y from xₛ + NΔx. should also checkout with yₛ + NΔy
-3. Once we have this frame, then get frame's (cache this
+2. Get closest point by getting closest computed frame's x or y from xₛ + NΔx
+3. Once we have this frame, then get frame's…
+
 "
 
 # ╔═╡ 29bd8490-4e32-11eb-38b4-436ddc96af5a
-@inline function get_heuristic(ᵐx, ᵐy, ᵐξₒ, boundary_poses) # ᵒξ
-	# get map point wrt object frame, get x coord directly (equals projection)
+# returns heuristic value at a map coordinate given the boundary poses wrt {𝑂}
+@inline function get_heuristic(ᵐx::Int, ᵐy::Int, boundary_poses::Vector{Pose2})
+	# base case
+	if isempty(boundary_poses) return 0 end
+	
+	# convert map point wrt object frame
+	ᵒpₘ = (- ᵐξₒ) ⋅ Point2(ᵐx, ᵐy) # ᵒpₘ.x is projection component along object axis
+	
+	# get closest boundary point index, 𝑁: ᵒpₘ ≈ 𝑁 * ᵒΔp.x (ᵒx_start = 0)
+	get_idx = x -> (0 ≤ x) ? min(length(boundary_poses), x + 1) : 1
+	𝑁 = (ᵒpₘ.x / ᵒΔp.x) |> round |> Int |> get_idx
+	
+	# get corresponding point on padding profile, ᵒpₚ
+	ᵒpₚ = boundary_poses[𝑁] ∘ Δdₚ |> Point2 # translate boundary pose by Δdₚ
+	
+	# return penalty norm (normalized it to 𝑑ₚ in map units)
+	return norm(ᵒpₘ - ᵒpₚ) / norm(Δdₚ)
 end
 
-# ╔═╡ a3f57948-4970-11eb-25f0-0d3d60aa888e
-# return heuristic per object point
-# return heuristic points for collection
-# heuristic evaluation over map
+# ╔═╡ 5e9f22de-4eed-11eb-0922-530a756fabd4
+md"
 
-# mutates free space elements (low val)
-function evaluate_heuristic()
-    # iterate over map and get heuristic values for all points (within low points)
+## Wrapping up
+Fixed axis (aspect ratio) and full plot.
+
+"
+
+# ╔═╡ a3f57948-4970-11eb-25f0-0d3d60aa888e
+# evaluates and stores heuristic for each free element on the map
+function evaluate_heuristic!(map::Map, boundary_poses::Vector{Pose2})
+	for x = 1:size(map.map, 2)
+		for y = 1:size(map.map, 1)
+			if map.map[y, x] == map.low
+				map.map[y, x] = get_heuristic(x, y, boundary_poses)
+			end
+		end
+	end
 end
 
 # ╔═╡ 3723d85e-4e33-11eb-0ed4-1328588c58aa
-# call upper function and plot
-
-# ╔═╡ 460817ea-4ed3-11eb-09ce-35602807c6f4
-𝑑ₚ
+begin
+	evaluate_heuristic!(env_map, ᵒboundary_poses)
+	plot_map(env_map)
+	plot_points(ᵐobj_pts)
+	plot_points([ᵐξₒ ⋅ Point2(ξ) for ξ ∈ ᵒboundary_poses]; color="green")
+	plot_points([ᵐξₒ ⋅ Point2(ξ ∘ Δdₚ) for ξ ∈ ᵒboundary_poses]; color="white")
+end
 
 # ╔═╡ Cell order:
 # ╟─3bda4224-4970-11eb-29ac-091d674c6763
@@ -254,6 +286,6 @@ end
 # ╠═aa19d822-4e65-11eb-0a43-05ff6cd19730
 # ╠═db8bf968-4e2f-11eb-192b-8716d8109f4c
 # ╠═29bd8490-4e32-11eb-38b4-436ddc96af5a
+# ╟─5e9f22de-4eed-11eb-0922-530a756fabd4
 # ╠═a3f57948-4970-11eb-25f0-0d3d60aa888e
 # ╠═3723d85e-4e33-11eb-0ed4-1328588c58aa
-# ╠═460817ea-4ed3-11eb-09ce-35602807c6f4
