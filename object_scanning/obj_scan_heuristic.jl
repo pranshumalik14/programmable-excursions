@@ -64,7 +64,7 @@ let
 	ʰp̃  = (- ˡξₕ) ⋅ ˡp̃ 			 # get point in new head frame
 	ʷp̃  = ʷξₗ ⋅ ˡp̃ 				 # get point back in world frame from new base frame
 	@assert ʷp̃ ≈ (ʷξₗ ⊕ ˡξₕ) ⋅ ʰp̃  # check for correctness of composition
-	
+
 	# check if point remained the same wrt all reference frames
 	@assert ˡp ≈ ʰp ≈ ʷp ≈ ʷp̃ ≈ ʰp̃ ≈ ˡp̃
 
@@ -140,7 +140,7 @@ begin
 	θₒ      = atan(yₑ - yₛ, xₑ - xₛ) 					# θ = tan⁻¹(Δy/Δx); obj angle
 	Δx, Δy 	= (Δp * cos(θₒ)) / res, (Δp * sin(θₒ)) / res# Δx and Δy in map coordinates
 	x_pts, y_pts = [xₛ:Δx:xₑ;], [yₛ:Δy:yₑ;]				# unfiltered obj x, y coords
-	ᵐobj_pts = [Point2(x, y) for (x, y) ∈ zip(x_pts, y_pts) 
+	ᵐobj_pts = [Point2(x, y) for (x, y) ∈ zip(x_pts, y_pts)
 			if checkbounds(Bool, env_map.map, y, x)]	# obj points in map coords
 
 	# object section frame {𝑂} and object points wrt {𝑂}
@@ -152,7 +152,7 @@ begin
 
 	# padding transform (translation along frame/pose orientation)
 	Δdₚ = Pose2(0, 𝑑ₚ / res, 0) # in map units
-	
+
 	# plot
 	plot_map(env_map)
 	plot_points(ᵐobj_pts)
@@ -202,10 +202,12 @@ function get_boundary_poses(ᵒobj_pts::Vector{Point2}, map::Map)
 		ᵒξᵢ, ᵒξᵢ₊₁ = boundary_poses[i:(i + 1)]
 		θᵢ = atan(ᵒξᵢ₊₁.y - ᵒξᵢ.y, ᵒξᵢ₊₁.x - ᵒξᵢ.x)
 		boundary_poses[i] = ᵒξᵢ ∘ Pose2(0, 0, θᵢ)
-	end
-	ᵒξₙ 	= last(boundary_poses)
-	θₙ₋₁ 	= (n > 1) ? boundary_poses[n - 1].θ : 0
-	boundary_poses[n] = ᵒξₙ ∘ Pose2(0, 0, θₙ₋₁)
+    end
+    if n > 1
+        ᵒξₙ     = last(boundary_poses)
+        θₙ₋₁    = boundary_poses[n - 1].θ
+        boundary_poses[n] = ᵒξₙ ∘ Pose2(0, 0, θₙ₋₁)
+    end
 
 	return boundary_poses
 end
@@ -235,20 +237,20 @@ Finally, with the boundary information, we can calculate the penalty heuristic a
 @inline function get_heuristic(ᵐx::Int, ᵐy::Int, boundary_poses::Vector{Pose2})
 	# base case
 	if isempty(boundary_poses) return 0 end
-	
+
 	# convert map point wrt object frame
 	ᵒpₘ = (- ᵐξₒ) ⋅ Point2(ᵐx, ᵐy) # ᵒpₘ.x is projection component along object axis
-	
+
 	# get closest boundary point index, 𝑁: ᵒpₘ ≈ 𝑁 * ᵒΔp.x (ᵒx_start = 0)
 	get_idx = x -> (0 ≤ x) ? min(length(boundary_poses), x + 1) : 1
 	𝑁 = (ᵒpₘ.x / ᵒΔp.x) |> round |> Int |> get_idx
-	
+
 	# get corresponding pose on padding profile, ᵒξₚ
 	ᵒξₚ = boundary_poses[𝑁] ∘ Δdₚ
-	
+
 	# convert map point wrt object frame to padding profile pose frame
 	ᵖpₘ = (- ᵒξₚ) ⋅ ᵒpₘ
-	
+
 	# return penalty distance (normalized it to 𝑑ₚ in map units)
 	return abs(ᵖpₘ.y) / norm(Δdₚ)
 end
