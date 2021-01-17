@@ -184,7 +184,7 @@ function get_boundary_poses(ᵒobj_pts::Vector{Point2}, map::Map)
 	# translate object pts by check vector to reach boundary pts
 	for ᵒpᵢ ∈ ᵒobj_pts
 		ᵐpᵢ = ᵐξₒ ⋅ ᵒpᵢ
-		while map_value(ᵐpᵢ.x, ᵐpᵢ.y, map) ≠ map.low
+		while map_value(ᵐpᵢ.x, ᵐpᵢ.y, map) ≥ map.high
 			ᵒpᵢ += ᵒΔc 		# increment object point
 			ᵐpᵢ = ᵐξₒ ⋅ ᵒpᵢ # update map point
 		end
@@ -266,8 +266,8 @@ To see the trend of this heuristic function and if it matches the desired paddin
 # ╔═╡ a3f57948-4970-11eb-25f0-0d3d60aa888e
 # evaluates and stores heuristic for each free element on the map
 function evaluate_heuristic!(map::Map, boundary_poses::Vector{Pose2})
-	for x = 1:size(map.map, 2)
-		for y = 1:size(map.map, 1)
+	for x ∈ 1:size(map.map, 2)
+		for y ∈ 1:size(map.map, 1)
 			if map.map[y, x] == map.low
 				map.map[y, x] = get_heuristic(x, y, boundary_poses)
 			end
