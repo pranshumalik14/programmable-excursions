@@ -96,7 +96,7 @@ const GeometricEntity2D = Union{Pose2,Point2,Frame2,Zero2}
 
 
 """
-Custom constructors and field accessors for pose, frame, and point.
+Custom constructors and field accessors for pose, frame, point, and map.
 """
 
 # Pose2(x,y,θ; name=head_frame_name, 𝑉=base_frame);
@@ -107,7 +107,7 @@ function Pose2(x::Real, y::Real, θ::Real; name::S="unnamed", 𝑉::Frame2=𝑊(
 end
 
 # Frame2(ᵛξᵤ) creates frame ʷ{𝑈}
-function Frame2(ξ::P) where {P <: Union{Pose2,Zero2}}
+function Frame2(ξ::P) where {P <: AbstractPose}
     x, y, θ = compose2(@SVector([ξ.𝑉.x, ξ.𝑉.y, ξ.𝑉.θ]), @SVector([ξ.x, ξ.y, ξ.θ]))
     Frame2(x, y, θ, ξ.name) # ʷ{𝑈}
 end
@@ -118,7 +118,7 @@ function Point2(x::Real, y::Real)
 end
 
 # Point2(ᵛξᵤ) = Point2(ᵛ{𝑈}); creates the origin of the frame {𝑈} wrt frame {𝑉}
-function Point2(ξ::P) where {P <: Union{Pose2,Zero2}}
+function Point2(ξ::P) where {P <: AbstractPose}
     ξ ⋅ Point2(0.0, 0.0, ξ.𝑈)
 end
 
@@ -128,7 +128,7 @@ function Point2(𝑈::Frame2)
 end
 
 # Pose2 custom field accessors for ease of use (Pose2.{x,y,θ})
-function Base.getproperty(ξ::P, field::Symbol) where {P <: Union{Pose2,Zero2}}
+function Base.getproperty(ξ::P, field::Symbol) where {P <: AbstractPose}
     if field ∈ (:𝑈, :𝑉)     # head/base frames
         return getfield(ξ, field)
     elseif field === :x     # x coordinate
@@ -157,6 +157,9 @@ function Base.isapprox(p₁::Point2, p₂::Point2)
     end
 end
 
+# Copy constructor for Map
+Base.copy(map::Map) = Map(map.map, map.low, map.high, map.und, map.res);
+
 
 """
 Pose and point operations and algebra:
@@ -179,7 +182,7 @@ function ⊕(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2})
         if (ξ₁.𝑉.name == ξ₂.𝑈.name) return 𝑍() end
         x, y, θ = compose2(@SVector([ξ₁.x, ξ₁.y, ξ₁.θ]), @SVector([ξ₂.x, ξ₂.y, ξ₂.θ]))
         𝑈 = Frame2(x, y, θ, ξ₂.name)
-        return Pose2(𝑈, ξ₁.𝑉) # todo: check if this is same as Pose2(x₁ + x₂, y₁ + y₂, θ₁ + θ₂)
+        return Pose2(𝑈, ξ₁.𝑉)
     end
 end
 
@@ -192,7 +195,7 @@ function Base.:∘(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2})
     else
         x, y, θ = compose2(@SVector([ξ₁.x, ξ₁.y, ξ₁.θ]), @SVector([ξ₂.x, ξ₂.y, ξ₂.θ]))
         𝑈 = Frame2(x, y, θ, "unnamed")
-        return Pose2(𝑈, ξ₁.𝑉) # todo: check if this is same as Pose2(x₁ + x₂, y₁ + y₂, θ₁ + θ₂)
+        return Pose2(𝑈, ξ₁.𝑉)
     end
 end
 
@@ -200,13 +203,13 @@ end
 Base.:+(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2}) = Base.:∘(ξ₁, ξ₂)
 
 # minus unary operator for pose
-function Base.:-(ξ::P) where {P <: Union{Pose2,Zero2}}
+function Base.:-(ξ::P) where {P <: AbstractPose}
     # get global frame ʷ{𝑈} and then return inverse relative pose
     𝑇 = @SMatrix   [cos(ξ.θ) -sin(ξ.θ) ξ.x;
                     sin(ξ.θ)  cos(ξ.θ) ξ.y;
                     0         0          1]
     ʷ𝑈 = Frame2(ξ)
-    𝑇⁻¹ = inv(𝑇) # todo: check if ∼ (-x,-y, -θ)
+    𝑇⁻¹ = inv(𝑇)
 
     return Pose2(𝑇⁻¹[1,3], 𝑇⁻¹[2, 3], atan(𝑇⁻¹[2, 1], 𝑇⁻¹[1, 1]); name=ξ.𝑉.name, 𝑉=ʷ𝑈)
 end
@@ -233,20 +236,20 @@ Base.:-(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2}) = ξ₁ ∘ -(ξ�
 end
 
 # returns a rotation transformation from 2D frame {𝑈} to reference frame {𝑉}, ᵛRᵤ
-@inline function rot2(ξ::P) where {P <: Union{Pose2,Zero2}}
+@inline function rot2(ξ::P) where {P <: AbstractPose}
     @unpack 𝑈 = ξ; @unpack θ = 𝑈;
     return @SMatrix ([cos(θ) -sin(θ);
                       sin(θ)  cos(θ)])
 end
 
 # returns a translation vector from reference frame {𝑉} to 2D frame {𝑈}, ᵛtᵤ
-@inline function transl2(ξ::P) where {P <: Union{Pose2,Zero2}}
+@inline function transl2(ξ::P) where {P <: AbstractPose}
     @unpack 𝑈 = ξ;
     return @SVector [𝑈.x, 𝑈.y]
 end
 
 # dot operator for point frame transformation by a relative pose, ᵛξᵤ ⋅ ᵘp = ᵛp
-function ⋅(ξ::P, p::Point2) where {P <: Union{Pose2,Zero2}}
+function ⋅(ξ::P, p::Point2) where {P <: AbstractPose}
     if ξ isa Zero2 && p.𝑉.name ∈ ("world", "zero")
         return p
     end
@@ -349,7 +352,37 @@ function plot_map(map::Map; Δx=0.5, Δy=0.2, xₛ=0.0, yₛ=0.1)
 end
 
 # plots a 2D geometric entity as a point
-function plot_points(gs::Vector{G₂}; color::S="red") where
+function plot_point(g::G₂; color::S="red", α=1.0) where
     {G₂ <: GeometricEntity2D,S <: AbstractString}
-    scatter!(getfield.(gs, :x), getfield.(gs, :y), legend=false, color=color)
+    scatter!([g.x], [g.y]; legend=false, color=color)
+end
+
+# plots multiple 2D geometric entities as points
+function plot_points(gs::Vector{G₂}; color::S="red", α=1.0) where
+    {G₂ <: GeometricEntity2D,S <: AbstractString}
+    p = plot!()
+    plot_point.(gs; color=color, α=α)
+    return p
+end
+
+# plots a Pose2
+function plot_pose(ξ::Pose2; length=0.2, thickness=2.5, color::S="black", α=1.0) where
+    {S <: AbstractString}
+    f = ξ |> Frame2 # get pose in world frame
+    quiver!([f.x], [f.y], quiver=([length*cos(f.θ)], [length*sin(f.θ)]); color=color,
+        linewidth=thickness, label="", α=α)
+end
+
+# plots a Zero2
+function plot_pose(ξ::Zero2; length, thickness, color::S="black", α=1.0) where
+    {S <: AbstractString}
+    scatter!([0], [0]; color=color, label="", α=α)
+end
+
+# plots multiple poses
+function plot_poses(ξs::Vector{P}; length=0.2, thickness=2.5, color::S="black", α=1.0) where
+    {P <: AbstractPose,S <: AbstractString}
+    p = plot!()
+    plot_pose.(ξs; length=length, thickness=thickness, color=color, α=α)
+    return p
 end

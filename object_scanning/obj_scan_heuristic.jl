@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.18
+# v0.12.21
 
 using Markdown
 using InteractiveUtils
@@ -154,6 +154,7 @@ begin
 	Δdₚ = Pose2(0, 𝑑ₚ / res, 0) # in map units
 
 	# plot
+	plot();
 	plot_map(env_map)
 	plot_points(ᵐobj_pts)
 end
@@ -198,6 +199,7 @@ function get_boundary_poses(ᵒobj_pts::Vector{Point2}, map::Map)
 	# the last pose, where its orientation is be the same as previous pose (capturing
 	# local curve in object boundary)
 	n = length(boundary_poses)
+	plot();
 	for i ∈ 1:(n - 1)
 		ᵒξᵢ, ᵒξᵢ₊₁ = boundary_poses[i:(i + 1)]
 		θᵢ = atan(ᵒξᵢ₊₁.y - ᵒξᵢ.y, ᵒξᵢ₊₁.x - ᵒξᵢ.x)
@@ -214,7 +216,10 @@ end
 
 # ╔═╡ aa19d822-4e65-11eb-0a43-05ff6cd19730
 begin
+	plot();
 	ᵒboundary_poses = get_boundary_poses(ᵒobj_pts, env_map)
+	plot_map(env_map)
+	plot_points(ᵐobj_pts)
 	plot_points([ᵐξₒ ⋅ Point2(ξ) for ξ ∈ ᵒboundary_poses]; color="green")
 end
 
@@ -277,6 +282,7 @@ end
 
 # ╔═╡ 3723d85e-4e33-11eb-0ed4-1328588c58aa
 begin
+	plot();
 	evaluate_heuristic!(env_map, ᵒboundary_poses)
 	plot_map(env_map)
 	plot_points(ᵐobj_pts)
@@ -285,7 +291,6 @@ begin
 end
 
 # ╔═╡ Cell order:
-# ╟─3bda4224-4970-11eb-29ac-091d674c6763
 # ╟─50f53aaa-49f5-11eb-0d5a-cb3e9c45649a
 # ╠═701ff10c-4a1d-11eb-0b65-59b45daa23c2
 # ╟─e6de0e36-496f-11eb-32e9-7f92c36296a3
@@ -300,3 +305,4 @@ end
 # ╟─5e9f22de-4eed-11eb-0922-530a756fabd4
 # ╠═a3f57948-4970-11eb-25f0-0d3d60aa888e
 # ╠═3723d85e-4e33-11eb-0ed4-1328588c58aa
+# ╟─3bda4224-4970-11eb-29ac-091d674c6763
