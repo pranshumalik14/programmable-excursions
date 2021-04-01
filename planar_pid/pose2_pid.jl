@@ -4,6 +4,15 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : missing
+        el
+    end
+end
+
 # ╔═╡ 322e91e0-8ea2-11eb-30c5-23cad2905fe3
 begin
 	include("../object_scanning/misc_utils.jl");
@@ -11,6 +20,7 @@ begin
 	using Plots;
 	using Statistics;
 	using LinearAlgebra;
+	using Images;
 end
 
 # ╔═╡ 871f906a-9158-11eb-3769-99159e457dd2
@@ -58,6 +68,9 @@ Note, $\theta$ is projected as we can be at any pose away from the reference pos
 begin
 	plot(; aspect_ratio=:equal)
 	plot_poses([Pose2(3,2.2, 5*π/3), Pose2(3,2.2, π/2), 𝑍()]; color="green", α=0.1)
+	plot_pose(Pose2(1,2, π))
+	plot_pose(Pose2(1,2, π/2))
+	plot_pose(Pose2(1,2, 4π/3))
 end
 
 # ╔═╡ 63c86eca-9176-11eb-1407-3bd19ccfcb7e
@@ -71,8 +84,66 @@ md"
 
 "
 
+# ╔═╡ 10181cbc-928c-11eb-0d11-fbab42ffb2c0
+@bind drawing HTML("""
+<div id=parent>
+	<canvas id=canvas width=680px height=200px></canvas>
+	<button id=clearButton>clear</button>
+</div>
+	
+<script>
+	const canvasWidth = 680, canvasHeight = 200, background = "#f1f1f1";
+	
+	const parentDiv = currentScript.closest('pluto-output').querySelector("div#parent")
+
+	
+	const c = document.getElementById("canvas");
+	const ctx = c.getContext("2d");
+	ctx.fillStyle = background;
+	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+	
+	let drawing = false;
+	
+	c.addEventListener('mousedown', () => drawing = true);
+	c.addEventListener('mouseup', () => drawing = false);
+	c.addEventListener('mousemove', (e) => {
+		if(drawing) {
+			ctx.beginPath();
+			ctx.arc(e.offsetX, e.offsetY, 4, 0, 2 * Math.PI);
+			ctx.fillStyle = "#010101";
+			ctx.fill();
+				
+			parentDiv.value = ctx.getImageData(0, 0, canvasWidth, canvasHeight).data;
+			parentDiv.dispatchEvent(new CustomEvent("input"));
+		}
+	});
+	
+	function clearCanvas(e) {
+		ctx.fillStyle = background;
+		ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+		parentDiv.value = ctx.getImageData(0, 0, canvasWidth, canvasHeight).data;
+		parentDiv.dispatchEvent(new CustomEvent("input"));
+	}
+	
+	document.getElementById("clearButton").addEventListener('click', clearCanvas);
+</script>
+""")
+
+# ╔═╡ 1fd8e246-928c-11eb-2961-f19871ec7c23
+begin
+	img = Vector{RGBA{N0f8}}()
+	for i ∈ 1:4:length(drawing)
+		push!(img, RGBA(reinterpret(N0f8, drawing[i:i+3])...))
+	end
+	img = reshape(img, 680, 200)
+	img = imrotate(img, π/2)
+	reverse(img; dims=2)
+end
+
 # ╔═╡ Cell order:
 # ╟─871f906a-9158-11eb-3769-99159e457dd2
 # ╠═de23b740-9164-11eb-1067-91f5035006ed
 # ╟─63c86eca-9176-11eb-1407-3bd19ccfcb7e
+# ╟─10181cbc-928c-11eb-0d11-fbab42ffb2c0
+# ╠═1fd8e246-928c-11eb-2961-f19871ec7c23
 # ╟─322e91e0-8ea2-11eb-30c5-23cad2905fe3
