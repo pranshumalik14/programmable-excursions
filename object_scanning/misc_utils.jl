@@ -127,6 +127,12 @@ function Point2(𝑈::Frame2)
     Point2(𝑈.x, 𝑈.y, 𝑊())
 end
 
+# Point2([x, y])
+function Point2(p::AbstractVector{<:Real})
+    @assert length(p) == 2
+    Point2(p[1], p[2], 𝑊())
+end
+
 # Pose2 custom field accessors for ease of use (Pose2.{x,y,θ})
 function Base.getproperty(ξ::P, field::Symbol) where {P <: AbstractPose}
     if field ∈ (:𝑈, :𝑉)     # head/base frames

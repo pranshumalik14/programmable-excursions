@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.12.21
+# v0.14.0
 
 using Markdown
 using InteractiveUtils
@@ -20,8 +20,38 @@ begin
 	using Plots;
 	using Statistics;
 	using LinearAlgebra;
-	using Images;
+	using TikzPictures;
+	TikzPictures.standaloneWorkaround(true);
 end
+
+# ╔═╡ 9ae5a438-9359-11eb-2f03-579a93583e6d
+TikzPicture("
+\\node (start) [startstop] {Start};
+\\node (in1) [io, below of=start] {Input};
+\\node (pro1) [process, below of=in1] {Process 1};
+\\node (dec1) [decision, below of=pro1, yshift=-0.5cm] {Decision 1};
+\\node (pro2a) [process, below of=dec1, yshift=-0.5cm] {Process 2a text text text text text text text text text text};
+\\node (pro2b) [process, right of=dec1, xshift=2cm] {Process 2b};
+\\node (out1) [io, below of=pro2a] {Output};
+\\node (stop) [startstop, below of=out1] {Stop};
+
+\\draw [arrow] (start) -- (in1);
+\\draw [arrow] (in1) -- (pro1);
+\\draw [arrow] (pro1) -- (dec1);
+\\draw [arrow] (dec1) -- node[anchor=east] {yes} (pro2a);
+\\draw [arrow] (dec1) -- node[anchor=south] {no} (pro2b);
+\\draw [arrow] (pro2b) |- (pro1);
+\\draw [arrow] (pro2a) -- (out1);
+\\draw [arrow] (out1) -- (stop);
+";
+options="node distance=2cm", 
+preamble="\\usepackage[utf8]{inputenc}
+\\usetikzlibrary{shapes.geometric, arrows}
+\\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, draw=black, fill=red!30]
+\\tikzstyle{io} = [trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!30]
+\\tikzstyle{process} = [rectangle, minimum width=3cm, minimum height=1cm, text centered, text width=3cm, draw=black, fill=orange!30]
+\\tikzstyle{decision} = [diamond, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=green!30]
+\\tikzstyle{arrow} = [thick,->,>=stealth]")
 
 # ╔═╡ 871f906a-9158-11eb-3769-99159e457dd2
 md"
@@ -66,7 +96,7 @@ Note, $\theta$ is projected as we can be at any pose away from the reference pos
 
 # ╔═╡ de23b740-9164-11eb-1067-91f5035006ed
 begin
-	plot(; aspect_ratio=:equal)
+	plot(; aspect_ratio=:equal);
 	plot_poses([Pose2(3,2.2, 5*π/3), Pose2(3,2.2, π/2), 𝑍()]; color="green", α=0.1)
 	plot_pose(Pose2(1,2, π))
 	plot_pose(Pose2(1,2, π/2))
@@ -87,22 +117,21 @@ md"
 # ╔═╡ 10181cbc-928c-11eb-0d11-fbab42ffb2c0
 @bind drawing HTML("""
 <div id=parent>
-	<canvas id=canvas width=680px height=200px></canvas>
+	<canvas id=canvas width=680px height=250px></canvas>
 	<button id=clearButton>clear</button>
 </div>
 	
 <script>
-	const canvasWidth = 680, canvasHeight = 200, background = "#f1f1f1";
+	const canvasWidth = 680, canvasHeight = 250, background = "#f1f1f1";
 	
-	const parentDiv = currentScript.closest('pluto-output').querySelector("div#parent")
-
-	
-	const c = document.getElementById("canvas");
+	const parentDiv = currentScript.previousElementSibling
+	const c = parentDiv.querySelector("canvas")
 	const ctx = c.getContext("2d");
 	ctx.fillStyle = background;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 	
 	let drawing = false;
+	parentDiv.value = [];
 	
 	c.addEventListener('mousedown', () => drawing = true);
 	c.addEventListener('mouseup', () => drawing = false);
@@ -113,7 +142,7 @@ md"
 			ctx.fillStyle = "#010101";
 			ctx.fill();
 				
-			parentDiv.value = ctx.getImageData(0, 0, canvasWidth, canvasHeight).data;
+			parentDiv.value.push([e.offsetX, (canvasHeight - e.offsetY)]);
 			parentDiv.dispatchEvent(new CustomEvent("input"));
 		}
 	});
@@ -121,29 +150,25 @@ md"
 	function clearCanvas(e) {
 		ctx.fillStyle = background;
 		ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-		parentDiv.value = ctx.getImageData(0, 0, canvasWidth, canvasHeight).data;
+		parentDiv.value = [];
 		parentDiv.dispatchEvent(new CustomEvent("input"));
 	}
 	
-	document.getElementById("clearButton").addEventListener('click', clearCanvas);
+	parentDiv.querySelector("#clearButton").addEventListener('click', clearCanvas);
 </script>
 """)
 
-# ╔═╡ 1fd8e246-928c-11eb-2961-f19871ec7c23
+# ╔═╡ 405803a6-eadd-410c-9f2f-182cb85f63ca
 begin
-	img = Vector{RGBA{N0f8}}()
-	for i ∈ 1:4:length(drawing)
-		push!(img, RGBA(reinterpret(N0f8, drawing[i:i+3])...))
-	end
-	img = reshape(img, 680, 200)
-	img = imrotate(img, π/2)
-	reverse(img; dims=2)
+	plot(; aspect_ratio=:equal, xlims=(0,680), ylims=(0,250));
+	Vector{Point2}(Point2.(drawing)) |> plot_points
 end
 
 # ╔═╡ Cell order:
+# ╟─9ae5a438-9359-11eb-2f03-579a93583e6d
 # ╟─871f906a-9158-11eb-3769-99159e457dd2
 # ╠═de23b740-9164-11eb-1067-91f5035006ed
 # ╟─63c86eca-9176-11eb-1407-3bd19ccfcb7e
 # ╟─10181cbc-928c-11eb-0d11-fbab42ffb2c0
-# ╠═1fd8e246-928c-11eb-2961-f19871ec7c23
+# ╠═405803a6-eadd-410c-9f2f-182cb85f63ca
 # ╟─322e91e0-8ea2-11eb-30c5-23cad2905fe3
