@@ -24,34 +24,17 @@ begin
 	TikzPictures.standaloneWorkaround(true);
 end
 
-# ╔═╡ 9ae5a438-9359-11eb-2f03-579a93583e6d
-TikzPicture("
-\\node (start) [startstop] {Start};
-\\node (in1) [io, below of=start] {Input};
-\\node (pro1) [process, below of=in1] {Process 1};
-\\node (dec1) [decision, below of=pro1, yshift=-0.5cm] {Decision 1};
-\\node (pro2a) [process, below of=dec1, yshift=-0.5cm] {Process 2a text text text text text text text text text text};
-\\node (pro2b) [process, right of=dec1, xshift=2cm] {Process 2b};
-\\node (out1) [io, below of=pro2a] {Output};
-\\node (stop) [startstop, below of=out1] {Stop};
+# ╔═╡ 4de32c03-45d8-4390-a977-b7661cd4453c
+md"
 
-\\draw [arrow] (start) -- (in1);
-\\draw [arrow] (in1) -- (pro1);
-\\draw [arrow] (pro1) -- (dec1);
-\\draw [arrow] (dec1) -- node[anchor=east] {yes} (pro2a);
-\\draw [arrow] (dec1) -- node[anchor=south] {no} (pro2b);
-\\draw [arrow] (pro2b) |- (pro1);
-\\draw [arrow] (pro2a) -- (out1);
-\\draw [arrow] (out1) -- (stop);
-";
-options="node distance=2cm", 
-preamble="\\usepackage[utf8]{inputenc}
-\\usetikzlibrary{shapes.geometric, arrows}
-\\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, draw=black, fill=red!30]
-\\tikzstyle{io} = [trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!30]
-\\tikzstyle{process} = [rectangle, minimum width=3cm, minimum height=1cm, text centered, text width=3cm, draw=black, fill=orange!30]
-\\tikzstyle{decision} = [diamond, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=green!30]
-\\tikzstyle{arrow} = [thick,->,>=stealth]")
+# Running Instructions
+
+Since this notebook makes use of Tikz diags, to run this notebook it is necessary to have the relevent tex packages installed. Therefore, please run the following commands to make sure you have all dependencies met:
+```shell
+sudo apt-get install texlive-latex-base texlive-binaries texlive-luatex texlive-latex-extra
+```
+
+"
 
 # ╔═╡ 871f906a-9158-11eb-3769-99159e457dd2
 md"
@@ -94,6 +77,35 @@ Note, $\theta$ is projected as we can be at any pose away from the reference pos
 
 "
 
+# ╔═╡ 9ae5a438-9359-11eb-2f03-579a93583e6d
+TikzPicture("
+\\node (start) [startstop] {Start};
+\\node (in1) [io, below of=start] {Input};
+\\node (pro1) [process, below of=in1] {Process 1};
+\\node (dec1) [decision, below of=pro1, yshift=-0.5cm] {Decision 1};
+\\node (pro2a) [process, below of=dec1, yshift=-0.5cm] {Process 2a text text text text text text text text text text};
+\\node (pro2b) [process, right of=dec1, xshift=2cm] {Process 2b};
+\\node (out1) [io, below of=pro2a] {Output};
+\\node (stop) [startstop, below of=out1] {Stop};
+
+\\draw [arrow] (start) -- (in1);
+\\draw [arrow] (in1) -- (pro1);
+\\draw [arrow] (pro1) -- (dec1);
+\\draw [arrow] (dec1) -- node[anchor=east] {yes} (pro2a);
+\\draw [arrow] (dec1) -- node[anchor=south] {no} (pro2b);
+\\draw [arrow] (pro2b) |- (pro1);
+\\draw [arrow] (pro2a) -- (out1);
+\\draw [arrow] (out1) -- (stop);
+";
+options="node distance=2cm", 
+preamble="\\usepackage[utf8]{inputenc}
+\\usetikzlibrary{shapes.geometric, arrows}
+\\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, draw=black, fill=red!30]
+\\tikzstyle{io} = [trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!30]
+\\tikzstyle{process} = [rectangle, minimum width=3cm, minimum height=1cm, text centered, text width=3cm, draw=black, fill=orange!30]
+\\tikzstyle{decision} = [diamond, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=green!30]
+\\tikzstyle{arrow} = [thick,->,>=stealth]")
+
 # ╔═╡ de23b740-9164-11eb-1067-91f5035006ed
 begin
 	plot(; aspect_ratio=:equal);
@@ -114,19 +126,37 @@ md"
 
 "
 
-# ╔═╡ 10181cbc-928c-11eb-0d11-fbab42ffb2c0
-@bind drawing HTML("""
+# ╔═╡ 809bcc64-9974-4ef0-980e-e7255a430e5d
+Base.@kwdef struct Canvas
+	height::Int64
+	width::Int64
+	px_to_dist::Real=1.0
+end
+
+# ╔═╡ 53afd619-5600-4513-a56d-0ef25d1d153a
+
+
+# ╔═╡ 275ef943-ea9a-4809-a7a5-90178fa3d594
+md"
+Try doing the following below:
+
+Size is $(@bind height Scrubbable(150:300; default=250))px by $(@bind width Scrubbable(600:680; default=680))px and every `100`px is $(@bind dist_per_100px Scrubbable(0.1:0.1:3; default=1)) meter(s).
+
+
+$(@bind drawing HTML(\"\"\"
 <div id=parent>
 	<canvas id=canvas width=680px height=250px></canvas>
 	<button id=clearButton>clear</button>
 </div>
-	
+
 <script>
-	const canvasWidth = 680, canvasHeight = 250, background = "#f1f1f1";
+	var canvasWidth = 680, canvasHeight = 250;
+	const background = \"#f1f1f1\";
 	
 	const parentDiv = currentScript.previousElementSibling
-	const c = parentDiv.querySelector("canvas")
-	const ctx = c.getContext("2d");
+	const c = parentDiv.querySelector(\"canvas\")
+	const ctx = c.getContext(\"2d\");
+
 	ctx.fillStyle = background;
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 	
@@ -139,11 +169,11 @@ md"
 		if(drawing) {
 			ctx.beginPath();
 			ctx.arc(e.offsetX, e.offsetY, 4, 0, 2 * Math.PI);
-			ctx.fillStyle = "#010101";
+			ctx.fillStyle = \"#010101\";
 			ctx.fill();
-				
+
 			parentDiv.value.push([e.offsetX, (canvasHeight - e.offsetY)]);
-			parentDiv.dispatchEvent(new CustomEvent("input"));
+			parentDiv.dispatchEvent(new CustomEvent(\"input\"));
 		}
 	});
 	
@@ -151,12 +181,16 @@ md"
 		ctx.fillStyle = background;
 		ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 		parentDiv.value = [];
-		parentDiv.dispatchEvent(new CustomEvent("input"));
+		parentDiv.dispatchEvent(new CustomEvent(\"input\"));
 	}
 	
-	parentDiv.querySelector("#clearButton").addEventListener('click', clearCanvas);
+	parentDiv.querySelector(\"button\").addEventListener('click', clearCanvas);
 </script>
-""")
+\"\"\"))
+"
+
+# ╔═╡ 5a4e3803-5fb6-4f8f-8e8e-f6da34eb5711
+drawing
 
 # ╔═╡ 405803a6-eadd-410c-9f2f-182cb85f63ca
 begin
@@ -165,10 +199,14 @@ begin
 end
 
 # ╔═╡ Cell order:
-# ╟─9ae5a438-9359-11eb-2f03-579a93583e6d
+# ╟─4de32c03-45d8-4390-a977-b7661cd4453c
 # ╟─871f906a-9158-11eb-3769-99159e457dd2
+# ╟─9ae5a438-9359-11eb-2f03-579a93583e6d
 # ╠═de23b740-9164-11eb-1067-91f5035006ed
 # ╟─63c86eca-9176-11eb-1407-3bd19ccfcb7e
-# ╟─10181cbc-928c-11eb-0d11-fbab42ffb2c0
+# ╠═809bcc64-9974-4ef0-980e-e7255a430e5d
+# ╠═53afd619-5600-4513-a56d-0ef25d1d153a
+# ╠═275ef943-ea9a-4809-a7a5-90178fa3d594
+# ╠═5a4e3803-5fb6-4f8f-8e8e-f6da34eb5711
 # ╠═405803a6-eadd-410c-9f2f-182cb85f63ca
 # ╟─322e91e0-8ea2-11eb-30c5-23cad2905fe3
