@@ -255,7 +255,7 @@ end
 end
 
 # dot operator for point frame transformation by a relative pose, ᵛξᵤ ⋅ ᵘp = ᵛp
-function ⋅(ξ::P, p::Point2) where {P <: AbstractPose}
+function LinearAlgebra.:⋅(ξ::P, p::Point2) where {P <: AbstractPose}
     if ξ isa Zero2 && p.𝑉.name ∈ ("world", "zero")
         return p
     end
@@ -360,7 +360,7 @@ end
 # plots a 2D geometric entity as a point
 function plot_point(g::G₂; color::S="red", α=1.0) where
     {G₂ <: GeometricEntity2D,S <: AbstractString}
-    scatter!([g.x], [g.y]; legend=false, color=color)
+    scatter!([g.x], [g.y]; legend=false, color=color, α=α)
 end
 
 # plots multiple 2D geometric entities as points

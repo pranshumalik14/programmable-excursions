@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.14.0
+# v0.14.3
 
 using Markdown
 using InteractiveUtils
@@ -126,16 +126,6 @@ md"
 
 "
 
-# ╔═╡ 809bcc64-9974-4ef0-980e-e7255a430e5d
-Base.@kwdef struct Canvas
-	height::Int64
-	width::Int64
-	px_to_dist::Real=1.0
-end
-
-# ╔═╡ 53afd619-5600-4513-a56d-0ef25d1d153a
-
-
 # ╔═╡ 275ef943-ea9a-4809-a7a5-90178fa3d594
 md"
 Try doing the following below:
@@ -146,7 +136,8 @@ Size is $(@bind height Scrubbable(150:300; default=250))px by $(@bind width Scru
 $(@bind drawing HTML(\"\"\"
 <div id=parent>
 	<canvas id=canvas width=680px height=250px></canvas>
-	<button id=clearButton>clear</button>
+	<button id=clearButton>Clear</button>
+	<button id=doneButton>Done</button>
 </div>
 
 <script>
@@ -161,42 +152,67 @@ $(@bind drawing HTML(\"\"\"
 	ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 	
 	let drawing = false;
-	parentDiv.value = [];
+	parentDiv.value = [false, []];
 	
+	window.onmouseup = () => { drawing = false; };
 	c.addEventListener('mousedown', () => drawing = true);
 	c.addEventListener('mouseup', () => drawing = false);
 	c.addEventListener('mousemove', (e) => {
 		if(drawing) {
-			ctx.beginPath();
-			ctx.arc(e.offsetX, e.offsetY, 4, 0, 2 * Math.PI);
-			ctx.fillStyle = \"#010101\";
-			ctx.fill();
+			if(parentDiv.value[1].length > 1) {
+				const point = parentDiv.value[1][parentDiv.value[1].length - 1];
+				ctx.moveTo(point[0][0], (canvasHeight - point[0][1]));
+				ctx.lineTo(e.offsetX, e.offsetY);
+				ctx.strokeStyle = 'black';
+				ctx.lineWidth = 5;
+				ctx.stroke();
+			}
 
-			parentDiv.value.push([e.offsetX, (canvasHeight - e.offsetY)]);
+			parentDiv.value[0] = false;
+			parentDiv.value[1].push([e.offsetX, (canvasHeight - e.offsetY)]);
 			parentDiv.dispatchEvent(new CustomEvent(\"input\"));
 		}
 	});
 	
 	function clearCanvas(e) {
+		ctx.beginPath();
 		ctx.fillStyle = background;
 		ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-		parentDiv.value = [];
+		parentDiv.value = [false, []];
+		parentDiv.dispatchEvent(new CustomEvent(\"input\"));
+	}
+
+	function readyOutput(e) {
+		drawing = false;
+		parentDiv.value[0] = true;
 		parentDiv.dispatchEvent(new CustomEvent(\"input\"));
 	}
 	
-	parentDiv.querySelector(\"button\").addEventListener('click', clearCanvas);
+	parentDiv.querySelector(\"#clearButton\").addEventListener('click', clearCanvas);
+	parentDiv.querySelector(\"#doneButton\").addEventListener('click', readyOutput);
 </script>
 \"\"\"))
 "
 
-# ╔═╡ 5a4e3803-5fb6-4f8f-8e8e-f6da34eb5711
-drawing
-
 # ╔═╡ 405803a6-eadd-410c-9f2f-182cb85f63ca
 begin
-	plot(; aspect_ratio=:equal, xlims=(0,680), ylims=(0,250));
-	Vector{Point2}(Point2.(drawing)) |> plot_points
+	if drawing[1] === true
+		plot(; aspect_ratio=:equal, xlims=(0,680), ylims=(0,250));
+		Vector{Point2}(Point2.(drawing[2])) |> plot_points
+	end
 end
+
+# ╔═╡ 6788d28b-c550-4d45-8cc2-f45376b3d95f
+# add tangent, cicle, and segment length code along with blocks for timestep and PID
+# 	calculations.
+
+# ╔═╡ 809bcc64-9974-4ef0-980e-e7255a430e5d
+# to do: create a canvas element with reconfigurable size in PlutoUI style.
+# Base.@kwdef struct Canvas
+# 	height::Int64
+# 	width::Int64
+# 	px_to_dist::Real=1.0
+# end
 
 # ╔═╡ Cell order:
 # ╟─4de32c03-45d8-4390-a977-b7661cd4453c
@@ -204,9 +220,8 @@ end
 # ╟─9ae5a438-9359-11eb-2f03-579a93583e6d
 # ╠═de23b740-9164-11eb-1067-91f5035006ed
 # ╟─63c86eca-9176-11eb-1407-3bd19ccfcb7e
-# ╠═809bcc64-9974-4ef0-980e-e7255a430e5d
-# ╠═53afd619-5600-4513-a56d-0ef25d1d153a
-# ╠═275ef943-ea9a-4809-a7a5-90178fa3d594
-# ╠═5a4e3803-5fb6-4f8f-8e8e-f6da34eb5711
+# ╟─275ef943-ea9a-4809-a7a5-90178fa3d594
 # ╠═405803a6-eadd-410c-9f2f-182cb85f63ca
+# ╠═6788d28b-c550-4d45-8cc2-f45376b3d95f
+# ╟─809bcc64-9974-4ef0-980e-e7255a430e5d
 # ╟─322e91e0-8ea2-11eb-30c5-23cad2905fe3
