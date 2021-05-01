@@ -23,9 +23,6 @@ using StaticArrays
 # !!todo!!: construction of a Pose2 with 𝑈 and 𝑉 having the same names should be
 # automatically made Zero2; with a warning message in the logger
 
-# !!todo!!:for default names, create a unique numbered (static global variable) frame so
-# that unwanted degeneration from Pose2 to Zero2 doesn't occur
-
 """
 Types and struct definitions for holding map and pose information
 """
@@ -44,6 +41,9 @@ abstract type AbstractPoint <: GeometricEntity end
     res::Real
 end
 
+# frame count variable for creating non-duplicate default frame names
+_unnamed_frame_count = 0
+
 # represents a 2D frame, (implicitly) wrt world frame. a frame is immutable, and by
 # default, defined wrt the (right-handed) world  coordinate frame.  note that, by
 # convention, θ (rad) increases in the anticlockwise direction. the 2D frame entity lives
@@ -51,8 +51,22 @@ end
 @with_kw struct Frame2 <: AbstractFrame
     x::Real
     y::Real
-    θ::Real # todo: conversion to (-π, π] to be looked up; also should be transform stable.
+    θ::Real # ∈ (-π, π]
     name::AbstractString
+
+    # angle conversion to (-π, π] to make poses and frames transform stable; set unique name
+    function Frame2(x::Real, y::Real, θ::Real, name::AbstractString)
+        if isempty(name)
+            global _unnamed_frame_count += 1
+            name = "unnamed#$_unnamed_frame_count"
+        end
+
+        if !(-π < θ ≤ π)
+            θ = atan(sin(θ), cos(θ))
+        end
+
+        return new(x, y, θ, name)
+    end
 end
 
 # returns a world coordinate frame at origin set to (x,y,θ) = (0,0,0)
@@ -72,7 +86,7 @@ const Vector2 = Point2
 # rigid body motion from {𝑈} to {𝑉}. the default reference frame {𝑉} is the world frame.
 # the 2D pose entity lives in SE(2).
 @with_kw mutable struct Pose2 <: AbstractPose
-    𝑈::Frame2 = Frame2(0, 0, 0, "unnamed") # Frame{pose head}
+    𝑈::Frame2 = Frame2(0, 0, 0, "") # Frame{pose head}
     𝑉::Frame2 = 𝑊() # Frame{pose tail/base (reference)}
 end
 
@@ -84,7 +98,7 @@ struct Zero2 <: AbstractPose
     function Zero2()
         𝑈 = Frame2(0, 0, 0, "zero")
         𝑉 = 𝑈
-        new(𝑈, 𝑉)
+        return new(𝑈, 𝑉)
     end
 end
 
@@ -100,7 +114,7 @@ Custom constructors and field accessors for pose, frame, point, and map.
 """
 
 # Pose2(x,y,θ; name=head_frame_name, 𝑉=base_frame);
-function Pose2(x::Real, y::Real, θ::Real; name::S="unnamed", 𝑉::Frame2=𝑊()) where
+function Pose2(x::Real, y::Real, θ::Real; name::S="", 𝑉::Frame2=𝑊()) where
     {S <: AbstractString}
     𝑈 = Frame2(x, y, θ, name)
     Pose2(𝑈, 𝑉)
@@ -200,7 +214,7 @@ function Base.:∘(ξ₁::Union{Pose2,Zero2}, ξ₂::Union{Pose2,Zero2})
         return ξ₁
     else
         x, y, θ = compose2(@SVector([ξ₁.x, ξ₁.y, ξ₁.θ]), @SVector([ξ₂.x, ξ₂.y, ξ₂.θ]))
-        𝑈 = Frame2(x, y, θ, "unnamed")
+        𝑈 = Frame2(x, y, θ, "")
         return Pose2(𝑈, ξ₁.𝑉)
     end
 end
@@ -380,7 +394,7 @@ function plot_pose(ξ::Pose2; length=0.2, thickness=2.5, color::S="black", α=1.
 end
 
 # plots a Zero2
-function plot_pose(ξ::Zero2; length, thickness, color::S="black", α=1.0) where
+function plot_pose(ξ::Zero2; length=0, thickness=0, color::S="black", α=1.0) where
     {S <: AbstractString}
     scatter!([0], [0]; color=color, label="", α=α)
 end

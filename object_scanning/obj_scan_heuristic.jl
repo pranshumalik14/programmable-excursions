@@ -47,7 +47,6 @@ Note:
 
 # ╔═╡ 701ff10c-4a1d-11eb-0b65-59b45daa23c2
 # basic usage example
-
 let
 	ʷξₗ = Pose2(1, 2, π/6; name="base_link")   # base link at (1,2) @ 30°
 	𝐿   = Frame2(ʷξₗ)							# global frame for the base link
