@@ -162,7 +162,7 @@ Now to plan to reach the vicinity of the tracking point, we need to get the arc 
 "
 
 # ╔═╡ 6788d28b-c550-4d45-8cc2-f45376b3d95f
-# returns a tuple of R, ϕ, Δθ
+# returns a tuple of R, Δθ
 function calc_connecting_arc_params(ξₛ::AbstractPose, ξₜ::AbstractPose)
 	# rotate input about a random point by a random amount (orthonormal transform)
 	ξᵣₐₙ = Pose2(rand(), rand(), rand()); ξ⁻¹ᵣₐₙ = -ξᵣₐₙ; ξᵣₒₜ = Pose2(0, 0, rand())
@@ -201,19 +201,19 @@ function calc_connecting_arc_params(ξₛ::AbstractPose, ξₜ::AbstractPose)
 	-----------------------------
 	"""
 	
-	ϕₛ = atan(R⃗ₛ.y, R⃗ₛ.x); ϕₜ = atan(R⃗ₜ.y, R⃗ₜ.x)
-	rot_dir = SA[R⃗ₛ.x, R⃗ₛ.y] × SA[cos(θₛ), sin(θₛ)] |> sign
-	ϕ̂ₜₛ = rot_dir * (ϕₜ - ϕₛ)
-	ϕ = (ϕₛ ≈ ϕₜ) ? 0.0 : (ϕ̂ₜₛ > 0) ?  ϕ̂ₜₛ : 2π + ϕ̂ₜₛ # arc angle
+	ϕₛ 		= atan(R⃗ₛ.y, R⃗ₛ.x); ϕₜ = atan(R⃗ₜ.y, R⃗ₜ.x)
+	rot_dir = @SVector[R⃗ₛ.x, R⃗ₛ.y] × @SVector[cos(θₛ), sin(θₛ)] |> sign
+	ϕ̂ₜₛ 	 = rot_dir * (ϕₜ - ϕₛ)
+	ϕ 		= (ϕₛ ≈ ϕₜ) ? 0.0 : (ϕ̂ₜₛ > 0) ?  ϕ̂ₜₛ : 2π + ϕ̂ₜₛ # arc angle
 	
-	return (R=R, ϕ=ϕ, Δθ=(rot_dir * ϕ))
+	return (R=R, Δθ=(rot_dir * ϕ))
 end
 
 # ╔═╡ 1c3e7e4b-fca2-4e2a-b74d-dbd85b639b92
-ξ₁ = Pose2(0, 1, π); ξ₂ = Pose2(-1, 0, π/2);
+#ξ₁ = Pose2(0, 1, π); ξ₂ = Pose2(-1, 0, π/2);
 #ξ₁ = Pose2(0, 1, 0); ξ₂ = Pose2(-1, 0, π/2);
 #ξ₁ = Pose2(1/√2, 1/√2, -π/4); ξ₂ = Pose2(0, 1, 0);
-#ξ₁ = Pose2(1/√2, 1/√2, -π/4); ξ₂ = Pose2(-1/√2, -1/√2, 3π/4);
+ξ₁ = Pose2(1/√2, 1/√2, -π/4); ξ₂ = Pose2(-1/√2, -1/√2, 3π/4);
 #ξ₁ = Pose2(1, 0, 0); ξ₂ = Pose2(2, 0, -π/4);
 #ξ₁ = 𝑍(); ξ₂ = 𝑍();
 
@@ -221,8 +221,8 @@ end
 begin
 	R = 0; ϕ = 0; Δθ = 0
 	with_terminal() do
-		R, ϕ, Δθ = calc_connecting_arc_params(ξ₁, ξ₂) # edge cases: when R or ϕ = NaN.
-		ϕ, Δθ = (ϕ, Δθ) .|> rad2deg
+		R, Δθ = calc_connecting_arc_params(ξ₁, ξ₂) # edge cases: when R or ϕ = NaN.
+		Δθ = Δθ |> rad2deg
 		@show R, ϕ, Δθ
 	end
 end
