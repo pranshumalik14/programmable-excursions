@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.14.3
+# v0.14.5
 
 using Markdown
 using InteractiveUtils
@@ -210,20 +210,22 @@ function calc_connecting_arc_params(ξₛ::AbstractPose, ξₜ::AbstractPose)
 end
 
 # ╔═╡ 1c3e7e4b-fca2-4e2a-b74d-dbd85b639b92
+# edge cases: when R or ϕ = NaN.
 #ξ₁ = Pose2(0, 1, π); ξ₂ = Pose2(-1, 0, π/2);
 #ξ₁ = Pose2(0, 1, 0); ξ₂ = Pose2(-1, 0, π/2);
 #ξ₁ = Pose2(1/√2, 1/√2, -π/4); ξ₂ = Pose2(0, 1, 0);
-ξ₁ = Pose2(1/√2, 1/√2, -π/4); ξ₂ = Pose2(-1/√2, -1/√2, 3π/4);
-#ξ₁ = Pose2(1, 0, 0); ξ₂ = Pose2(2, 0, -π/4);
+#ξ₁ = Pose2(1/√2, 1/√2, -π/4); ξ₂ = Pose2(-1/√2, -1/√2, 3π/4);
+ξ₁ = Pose2(1, 0, 0); ξ₂ = Pose2(2, 0, -π/4);
 #ξ₁ = 𝑍(); ξ₂ = 𝑍();
 
 # ╔═╡ ffd08b53-5dc0-46a7-8614-c866753ce588
 begin
-	R = 0; ϕ = 0; Δθ = 0
+	R, Δθ = calc_connecting_arc_params(ξ₁, ξ₂)
+	
 	with_terminal() do
-		R, Δθ = calc_connecting_arc_params(ξ₁, ξ₂) # edge cases: when R or ϕ = NaN.
-		Δθ = Δθ |> rad2deg
-		@show R, ϕ, Δθ
+		global Δθ = rad2deg(Δθ)
+		@show R, Δθ
+		global Δθ = deg2rad(Δθ)
 	end
 end
 
@@ -242,16 +244,12 @@ md"
 "
 
 # ╔═╡ b5ea5a48-37d1-4ec5-b9ad-f0598ea20fb4
-# corner case: if the same pose is given
-# omega is always positive!!!
-let
-	R, ϕ = calc_connecting_arc_params(Pose2(0, 0, 0), Pose2(-1, 0.015, 0))
-	s = (R * ϕ) 
+begin
+	s = R * abs(Δθ) 
 	Δt = s/0.17
-	ω = ϕ/Δt
+	ω = Δθ/Δt
 	with_terminal() do
-		@show R, ϕ
-		@show ω
+		@show s, ω
 	end
 end
 
@@ -262,9 +260,14 @@ md"
 
 "
 
+# ╔═╡ 764dd1e4-4324-4e58-a010-f18648913127
+md"
+ ### add noise for control command and also a gaussian RV for control delay. Latency has a mean around 0 (again, changeable, and a small sigma).
+"
+
 # ╔═╡ 859bdb5a-c284-4dfe-873c-ea73f3697dbd
 md"
-### genetic algo based pid tuner for candidate traj: straight, circular, wavy mix.
+### genetic algo based pid tuner for candidate traj: straight, circular, rectangular, wavy sinusoid, mix of all.
 
 "
 
@@ -330,6 +333,7 @@ sudo apt-get install texlive-latex-base texlive-binaries texlive-luatex texlive-
 # ╟─a4f92a78-9fff-48a3-95d5-6495c142da32
 # ╠═b5ea5a48-37d1-4ec5-b9ad-f0598ea20fb4
 # ╟─9f480ebf-2c0b-479d-8ff8-943732b2f50d
+# ╟─764dd1e4-4324-4e58-a010-f18648913127
 # ╟─859bdb5a-c284-4dfe-873c-ea73f3697dbd
 # ╟─9ae5a438-9359-11eb-2f03-579a93583e6d
 # ╟─809bcc64-9974-4ef0-980e-e7255a430e5d
