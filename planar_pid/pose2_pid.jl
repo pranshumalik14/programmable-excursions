@@ -22,6 +22,7 @@ begin
 	using StaticArrays;
 	using Parameters;
 	using Statistics;
+	using StatsFuns;
 	using PlutoUI;
 	using Images;
 	using Plots;
@@ -246,6 +247,7 @@ function squared_perp_error(ξᵣ, setpnt_idx, ref_path)
 	
 	pᵣ = Point2(ξᵣ)
 	
+	# get starting poses of reference path segments to computing error
 	if setpnt_idx == 1
 		Δp = ref_path[begin+1] - ref_path[begin]
 		ξₙₑₓₜ = Pose2(ref_path[begin].x, ref_path[begin].y, atan(Δp.y, Δp.x))
@@ -277,8 +279,64 @@ function squared_perp_error(ξᵣ, setpnt_idx, ref_path)
 	return min(abs(ᵖʳᵉᵛpᵣ.y), abs(ⁿᵉˣᵗpᵣ.y))^2
 end
 
+# ╔═╡ 129b46c7-9ad5-42e5-adf1-df6fd4ddb1d1
+md"
+
+The `v_ref` function has the following phases, for $x \ge 0$
+
+$a\left(x\right)\ =\ \frac{L_{a}}{1+e^{-k_{a}\left(x-x_{0}\right)}}\left\{0<x\le0.5\right\}$
+$f\left(x\right)\ =\ L\left\{0.5<x<s_{tot}-0.5\right\}$
+$d\left(x\right)\ =\ \frac{L_{d}}{1+e^{-k_{d}\left(s_{tot}-x-x_{0}\right)}}\left\{0<s_{tot}-x<0.5\right\}$
+$\sigma(x) = \frac{1}{1 + e^{-x}}$
+
+"
+
+# ╔═╡ 9147c226-4718-4c18-9369-ff4122a5abcb
+md"
+
+Path length, `sₜₒₜ` =
+$(@bind sₜₒₜ Slider(0.0:0.01:2.5; default=1.3, show_value=true))
+"
+
+# ╔═╡ 82e75bef-ad2a-4ddc-92db-28a1565f2d01
+begin
+	s = 0:0.001:sₜₒₜ
+	plot(s, [1.5*sin(3*si + π/2-π/6)-0.3 for si ∈ s]; label="k, 1/R", size=(600,200))
+end
+
+# ╔═╡ ab76b7f9-f505-4220-be4b-83ffd3d88558
+function v_ref(R, s, sₜₒₜ; s₀=0.25, Lₐ=0.193, Lᵣ=0.171, L=0.17, kₐ=8, kᵣ=20, 
+	acc_dist=0.5, scale=0.184, expn=1.5, vₘᵢₙ=0.02)
+	if s < 0 || s ≥ sₜₒₜ
+		return 0
+	end
+	
+	# velocity profile taking only curvature into account
+	curvature_profile = (R) -> scale * expn^(-1/abs(R))
+	
+	# base velocity profile over the entire reference path
+	acc_profile  = (s) -> (0 ≤ s < acc_dist) ? 
+					Lₐ * logistic(kₐ * (s - s₀)) : L
+	retd_profile = (s, sₜₒₜ) -> (0 ≤ sₜₒₜ - s < acc_dist) ? 
+					Lᵣ * logistic(kᵣ * (sₜₒₜ - s - s₀)) : L
+	base_profile = (s, sₜₒₜ) -> min(acc_profile(s), retd_profile(s, sₜₒₜ))
+	
+	# combined and clamped vel prof
+	vel_profile   = (R, s, sₜₒₜ) -> min(base_profile(s, sₜₒₜ), curvature_profile(R))
+	clamp_profile = (R, s, sₜₒₜ) -> (0 ≤ sₜₒₜ - s < acc_dist) ? 
+					 vel_profile(R, s, sₜₒₜ) : max(vel_profile(R, s, sₜₒₜ), vₘᵢₙ)
+	
+	return clamp_profile(R, s, sₜₒₜ)
+end
+
+# ╔═╡ 21bcf487-7a7a-49cd-a3be-936e01e69f50
+begin
+	plot(s, [v_ref(1/(1.5*sin(3*si + π/2-π/6)-0.3), si, sₜₒₜ) for si ∈ s]; 
+		aspect_ratio=:equal, ylims=(0,0.20), label="v (m/s)", size=(600,200))
+end
+
 # ╔═╡ 04b9573b-0d55-42e6-9a66-ab37ee254244
-function gen_control_cmd(ξᵣ, pₛₑₜ, pid_params, v_ref, ω_ref)
+function gen_control_cmd(ξᵣ, pₛₑₜ, pid_params, v_ref)
 	R, Δθ = calc_connecting_arc_params(ξᵣ, ξₛₑₜ)
 	# get v_ref, ω_ref
 	# do colinearity check for input and setpoint (for forward and reverse)
@@ -289,25 +347,8 @@ function gen_control_cmd(ξᵣ, pₛₑₜ, pid_params, v_ref, ω_ref)
 	# ω = Δθ/Δt
 end
 
-# ╔═╡ 1ac70a22-47a6-4127-9bd1-3bc6c1ea6e32
-md"
-## the controller should have an internal reference generator. So if the curvature is too high, restrict ω and go with according v
-"
-
-# ╔═╡ ab76b7f9-f505-4220-be4b-83ffd3d88558
-# todo checkout velgen in code for hard stop/slow down code
-function v_ref(s, sₜₒₜ)
-	return 
-end
-
-# ╔═╡ 9480e5d9-7275-4fe2-b94a-dc02a4ac40a7
-# R: radius of curvature
-function ω_ref(R)
-	return
-end
-
 # ╔═╡ 255a318d-68de-4246-be83-2e94b3e059a1
-function control_loop(ref_path, v_ref, ω_ref, pid_params, ctrl_rate_hz=60,
+function control_loop(ref_path, v_ref, pid_params, ctrl_rate_hz=60;
 	𝒵=[Dirac(0), Dirac(0)], 𝒟=Dirac(0))
 	# while setpnt_idx ≤ length(ref_path)
 		# update set point
@@ -390,6 +431,13 @@ $(@bind drawing HTML(\"\"\"
 \"\"\"))
 "
 
+# ╔═╡ 95ad3a95-9177-4d93-8ade-d8999beb1d42
+md"
+
+Plot lin and ang vel over time/distance as well and also generate acc and jerk curves. Generate rms over these for use in the tracking score and tuning as well.
+
+"
+
 # ╔═╡ ffdbd654-7bab-4879-ab71-8489827b64c4
 md"
 
@@ -399,7 +447,7 @@ Robot starting pose, $\xi_\text{r}$, is ($(@bind ξᵣ_x Scrubbable(0:0.1:6.8*di
 
 # ╔═╡ 405803a6-eadd-410c-9f2f-182cb85f63ca
 begin
-	if drawing[1] == true
+	if drawing[1] !== missing && drawing[1] == true
 		xmax = 6.8 * dist_per_100px
 		ymax = 2.5 * dist_per_100px
 		coord_scale_factor = dist_per_100px/100
@@ -447,6 +495,7 @@ PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+StatsFuns = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
 
 [compat]
 Distributions = "~0.25.11"
@@ -455,6 +504,7 @@ Parameters = "~0.12.2"
 Plots = "~1.19.3"
 PlutoUI = "~0.7.9"
 StaticArrays = "~1.2.8"
+StatsFuns = "~0.9.8"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -1707,13 +1757,16 @@ version = "0.9.1+5"
 # ╠═b5c84b28-15b8-4c3c-ac57-ef29e4a7a71d
 # ╟─104e1584-9f6c-42b8-815a-907a852fbae8
 # ╠═de0b5b41-a210-48c9-a159-3c36638d8380
-# ╠═04b9573b-0d55-42e6-9a66-ab37ee254244
-# ╟─1ac70a22-47a6-4127-9bd1-3bc6c1ea6e32
+# ╟─129b46c7-9ad5-42e5-adf1-df6fd4ddb1d1
+# ╟─9147c226-4718-4c18-9369-ff4122a5abcb
+# ╟─82e75bef-ad2a-4ddc-92db-28a1565f2d01
+# ╠═21bcf487-7a7a-49cd-a3be-936e01e69f50
 # ╠═ab76b7f9-f505-4220-be4b-83ffd3d88558
-# ╠═9480e5d9-7275-4fe2-b94a-dc02a4ac40a7
+# ╠═04b9573b-0d55-42e6-9a66-ab37ee254244
 # ╠═255a318d-68de-4246-be83-2e94b3e059a1
 # ╠═cf39899f-f788-47de-a617-8d9dce286bc5
 # ╟─275ef943-ea9a-4809-a7a5-90178fa3d594
+# ╟─95ad3a95-9177-4d93-8ade-d8999beb1d42
 # ╟─ffdbd654-7bab-4879-ab71-8489827b64c4
 # ╟─405803a6-eadd-410c-9f2f-182cb85f63ca
 # ╟─859bdb5a-c284-4dfe-873c-ea73f3697dbd
