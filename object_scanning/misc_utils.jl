@@ -372,37 +372,55 @@ function plot_map(map::Map; Δx=0.5, Δy=0.2, xₛ=0.0, yₛ=0.1)
 end
 
 # plots a 2D geometric entity as a point
-function plot_point(g::G₂; color::S="red", α=1.0) where
+function plot_point(g::G₂; color::S="red", α=1.0, label="", legend=false) where
     {G₂ <: GeometricEntity2D,S <: AbstractString}
-    scatter!([g.x], [g.y]; legend=false, color=color, α=α)
+    scatter!([g.x], [g.y]; color=color, label=label, α=α, legend=legend)
 end
 
 # plots multiple 2D geometric entities as points
-function plot_points(gs::Vector{G₂}; color::S="red", α=1.0) where
+function plot_points(gs::Vector{G₂}; color::S="red", α=1.0, label="", legend=false) where
     {G₂ <: GeometricEntity2D,S <: AbstractString}
     p = plot!()
-    plot_point.(gs; color=color, α=α)
+    plot_point.(gs; color=color, label=label, α=α, legend=legend)
     return p
 end
 
 # plots a Pose2
-function plot_pose(ξ::Pose2; length=0.2, thickness=2.5, color::S="black", α=1.0) where
-    {S <: AbstractString}
+function plot_pose(ξ::Pose2; length=0.2, thickness=2.5, color::S="black", α=1.0, label="",
+    legend=false) where {S <: AbstractString}
     f = ξ |> Frame2 # get pose in world frame
     quiver!([f.x], [f.y], quiver=([length*cos(f.θ)], [length*sin(f.θ)]); color=color,
-        linewidth=thickness, label="", α=α)
+        linewidth=thickness, label=label, α=α, legend=legend)
 end
 
 # plots a Zero2
-function plot_pose(ξ::Zero2; length=0, thickness=0, color::S="black", α=1.0) where
-    {S <: AbstractString}
-    scatter!([0], [0]; color=color, label="", α=α)
+function plot_pose(ξ::Zero2; length=0, thickness=0, color::S="black", α=1.0, label="",
+    legend=false) where {S <: AbstractString}
+    scatter!([0], [0]; color=color, label=label, α=α, legend=legend)
 end
 
 # plots multiple poses
-function plot_poses(ξs::Vector{P}; length=0.2, thickness=2.5, color::S="black", α=1.0) where
-    {P <: AbstractPose,S <: AbstractString}
+function plot_poses(ξs::Vector{P}; length=0.2, thickness=2.5, color::S="black", α=1.0,
+    label="", legend=false) where {P <: AbstractPose,S <: AbstractString}
     p = plot!()
-    plot_pose.(ξs; length=length, thickness=thickness, color=color, α=α)
+    plot_pose.(ξs; length=length, thickness=thickness, color=color, label=label, α=α,
+        legend=legend)
+    return p
+end
+
+# plots multiple poses
+function plot_path(gs::Vector{G₂}; color::S="black", α=1.0, label="", legend=true) where
+    {G₂ <: GeometricEntity2D,S <: AbstractString}
+    p = plot!()
+    if !isempty(gs) && length(gs) > 2
+        strip_x = x -> getproperty(x, :x)
+        strip_y = x -> getproperty(x, :y)
+        plot!(gs .|> strip_x, gs .|> strip_y; color=color, α=α, label=label,
+            background_color_legend=nothing)
+        plot_point(first(gs); color="green", α=α, label="Start", legend=legend)
+        plot_point(last(gs); color="red", α=α, label="End", legend=legend)
+    else
+        plot_point.(gs; color=color, α=α)
+    end
     return p
 end
