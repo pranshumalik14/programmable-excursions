@@ -205,11 +205,14 @@ end
 # setpnt_idx:
 # ref_path:
 # radius:  
-function update_setpoint!(ξᵣ, setpnt_idx, ref_path; radius=25e-2)
+function update_setpoint(ξᵣ, setpnt_idx, ref_path; radius=25e-2)
 	pᵣ = Point2(ξᵣ)
+	
 	if 1 ≤ setpnt_idx ≤ length(ref_path) && norm(pᵣ - ref_path[setpnt_idx]) < radius
 		setpnt_idx += 1
 	end
+	
+	return setpnt_idx
 end
 
 # ╔═╡ 104e1584-9f6c-42b8-815a-907a852fbae8
@@ -403,7 +406,7 @@ function control_loop(ξᵣ, ref_path, v_ref, pid_params, timelim=10.0; ## temp 
 		ξ̂ᵣ = simulate_fwd(ξᵣ, u, Δt, 𝒵, 𝒟)
 		s += norm(Point2(ξ̂ᵣ) - Point2(ξᵣ)); ξᵣ = ξ̂ᵣ
 		push!(ctrl_path, Point2(ξᵣ)); push!(ξs, ξᵣ); push!(vs, u.v); push!(ωs, u.ω)
-		update_setpoint!(ξᵣ, setpnt_idx, ref_path)
+		setpnt_idx = update_setpoint(ξᵣ, setpnt_idx, ref_path)
 	end
 	
 	return (ctrl_path=ctrl_path, ξs=ξs, rmse=√(Σd⊥²/length(ctrl_path)), v=vs, ω=ωs)
@@ -534,7 +537,7 @@ end
 # ╔═╡ cdea4a7b-75f1-41eb-bfe6-b3df202d6508
 md"
 Time limit, `timelim` =
-$(@bind timelim Slider(0.001:0.001:0.1; default=0.01, show_value=true))
+$(@bind timelim Slider(0.001:0.001:1.5; default=0.01, show_value=true))
 "
 
 # ╔═╡ cf39899f-f788-47de-a617-8d9dce286bc5
@@ -548,14 +551,14 @@ begin
 	plot_pose(last(ξs); color="orange", legend=true)
 end
 
+# ╔═╡ 2a9c08c3-e7dc-4f7b-90ef-963a975552ac
+rmse
+
 # ╔═╡ 526d869a-d90f-4a3f-97db-b3e516fb199c
-plot(1:length(ctrl_path), vs)
+plot(1:length(ctrl_path), vs; ylims=(0, 0.2))
 
 # ╔═╡ 351d40d1-4cef-46d0-a815-439f568d75a8
 plot(1:length(ctrl_path), ωs)
-
-# ╔═╡ 2a9c08c3-e7dc-4f7b-90ef-963a975552ac
-rmse
 
 # ╔═╡ 859bdb5a-c284-4dfe-873c-ea73f3697dbd
 md"
@@ -1865,10 +1868,10 @@ version = "0.9.1+5"
 # ╟─ffdbd654-7bab-4879-ab71-8489827b64c4
 # ╟─405803a6-eadd-410c-9f2f-182cb85f63ca
 # ╟─cdea4a7b-75f1-41eb-bfe6-b3df202d6508
-# ╠═cf39899f-f788-47de-a617-8d9dce286bc5
+# ╟─cf39899f-f788-47de-a617-8d9dce286bc5
+# ╠═2a9c08c3-e7dc-4f7b-90ef-963a975552ac
 # ╠═526d869a-d90f-4a3f-97db-b3e516fb199c
 # ╠═351d40d1-4cef-46d0-a815-439f568d75a8
-# ╠═2a9c08c3-e7dc-4f7b-90ef-963a975552ac
 # ╟─859bdb5a-c284-4dfe-873c-ea73f3697dbd
 # ╟─21b5474a-bc5e-4f9f-b211-aa34a72c57ed
 # ╠═322e91e0-8ea2-11eb-30c5-23cad2905fe3
