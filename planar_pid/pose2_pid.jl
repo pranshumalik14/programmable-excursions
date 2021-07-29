@@ -143,16 +143,6 @@ function calc_connecting_arc_params(ξₛ, pₜ)
 	return (R=R, Δθ=(rot_dir * ϕ))
 end
 
-# ╔═╡ 1c3e7e4b-fca2-4e2a-b74d-dbd85b639b92
-# edge cases: when R or ϕ = NaN.
-#ξ₁ = Pose2(0, 1, π); ξ₂ = Pose2(-1, 0, π/2);
-#ξ₁ = Pose2(0, 1, 0); ξ₂ = Pose2(-1, 0, π/2);
-#ξ₁ = Pose2(1/√2, 1/√2, -π/4); ξ₂ = Pose2(0, 1, 0);
-#ξ₁ = Pose2(1/√2, 1/√2, -π/4); ξ₂ = Pose2(-1/√2, -1/√2, 3π/4);
-#ξ₁ = Pose2(1, 0, 0); ξ₂ = Pose2(2, 0, -π/4);
-ξ₁ = Pose2(2, 0, 0); ξ₂ = Pose2(1, 0, -π/4);
-#ξ₁ = 𝑍(); ξ₂ = 𝑍();
-
 # ╔═╡ 9530b918-b963-42c7-8334-4319d6441df3
 md"
 
@@ -172,10 +162,10 @@ md"
 Can use the pose operations one too, slower, obv from the closed-form sol.
 
 ```julia
-function simulate_fwd(ξᵣ, u, Δt, tol=1e-6)
+function simulate_fwd(ξᵣ, u, Δt; ωtol=1e-6)
 	# ξₒ: ref pose at instantaenous center of rotation
 	# rotate ξᵣ about ξₒ by Δθ = u.ω * Δt
-	if u.ω > tol
+	if u.ω > ωtol
 		ξₒ = ξᵣ + Pose2(0, u.v/u.ω, -ξᵣ.θ)
 		ξ⁻¹ₒ = -ξₒ; ξᵣₒₜ = Pose2(0, 0, u.ω * Δt)
 		ξ̃ₒ = (ξₒ ∘ ξᵣₒₜ)
@@ -195,19 +185,19 @@ end
 # u: control command [v, ω]
 # 𝒵: noise distribution vector [v, ω] (normal rv)
 # 𝒟: control delay distribution (exponential rv)
-# returns step fwd ξᵣ
-function simulate_fwd(ξᵣ, u, Δt, 𝒵, 𝒟, tol=1e-6)
-	u.v += rand(𝒵.v); u.ω += rand(𝒵.ω); Δt += rand(𝒟)
+# returns step fwd ξᵣ = ξ̂ᵣ and Δt̂ = Δt + 𝒟 (for use in PID)
+function simulate_fwd(ξᵣ, u, Δt, 𝒵, 𝒟; ωtol=1e-6)
+	v = u.v + rand(𝒵.v); ω = u.ω + rand(𝒵.ω); Δt += rand(𝒟)
 	
-	if abs(u.ω) > tol
-		xᵣ = ξᵣ.x - u.v/u.ω * (sin(ξᵣ.θ) - sin(ξᵣ.θ + Δt * u.ω))
-		yᵣ = ξᵣ.y + u.v/u.ω * (cos(ξᵣ.θ) - cos(ξᵣ.θ + Δt * u.ω))
+	if abs(u.ω) > ωtol
+		xᵣ = ξᵣ.x - v/ω * (sin(ξᵣ.θ) - sin(ξᵣ.θ + Δt * ω))
+		yᵣ = ξᵣ.y + v/ω * (cos(ξᵣ.θ) - cos(ξᵣ.θ + Δt * ω))
 	else
-		xᵣ = ξᵣ.x + u.v * Δt * cos(ξᵣ.θ)
-        yᵣ = ξᵣ.y + u.v * Δt * sin(ξᵣ.θ)
+		xᵣ = ξᵣ.x + v * Δt * cos(ξᵣ.θ)
+        yᵣ = ξᵣ.y + v * Δt * sin(ξᵣ.θ)
 	end
 	
-	θᵣ = ξᵣ.θ + u.ω * Δt
+	θᵣ = ξᵣ.θ + ω * Δt
 	return Pose2(xᵣ, yᵣ, θᵣ)
 end
 
@@ -215,9 +205,9 @@ end
 # setpnt_idx:
 # ref_path:
 # radius:  
-function update_setpoint!(ξᵣ, setpnt_idx, ref_path, radius=5e-2)
+function update_setpoint!(ξᵣ, setpnt_idx, ref_path; radius=25e-2)
 	pᵣ = Point2(ξᵣ)
-	if 1 ≤ setpnt_idx ≤ length(ref_path) && norm(pᵣ, ref_path[setpnt_idx]) < radius
+	if 1 ≤ setpnt_idx ≤ length(ref_path) && norm(pᵣ - ref_path[setpnt_idx]) < radius
 		setpnt_idx += 1
 	end
 end
@@ -227,7 +217,7 @@ md"
 
 Parametrize reference path over t, and the perpendicular disrance can be defined as
 
-$d_{p,i\perp r_p} = \min_t{} , t \in [0,1]$
+$d_{p,i\perp r_p} = \min_s{} , s \in [0,1]$
 
 $\text{RMSE} = \sqrt{\frac{\displaystyle \sum^N_{i=1} d_{p,i\perp r_p}^2}{N}}$
 
@@ -238,6 +228,17 @@ $t(d_{p,i\perp r_p}) \leq t(d_{p,j\perp r_p})$
 This on-the-fly rmse calculation routine works on the assumption that the robot pose is always in the vicinity of the set point.
 
 "
+
+# ╔═╡ 7c3778d8-6fcc-46cf-86d4-579afd3dbab3
+function compute_sₜₒₜ(ref_path)
+	sₜₒₜ = 0
+	
+	for i = 1:(length(ref_path) - 1)
+		sₜₒₜ += norm(ref_path[i] - ref_path[i+1])
+	end
+
+	return sₜₒₜ
+end
 
 # ╔═╡ de0b5b41-a210-48c9-a159-3c36638d8380
 function squared_perp_error(ξᵣ, setpnt_idx, ref_path)
@@ -282,7 +283,7 @@ end
 # ╔═╡ 129b46c7-9ad5-42e5-adf1-df6fd4ddb1d1
 md"
 
-The `v_ref` function has the following phases, for $x \ge 0$
+The `v_ref` is a piecewise function has the following phases, for $x \ge 0$
 
 $a\left(x\right)\ =\ \frac{L_{a}}{1+e^{-k_{a}\left(x-x_{0}\right)}}\left\{0<x\le0.5\right\}$
 $f\left(x\right)\ =\ L\left\{0.5<x<s_{tot}-0.5\right\}$
@@ -296,17 +297,20 @@ md"
 
 Path length, `sₜₒₜ` =
 $(@bind sₜₒₜ Slider(0.0:0.01:2.5; default=1.3, show_value=true))
+
+Add checkbox to enable or disable curvature info in vel gen.
+
 "
 
 # ╔═╡ 82e75bef-ad2a-4ddc-92db-28a1565f2d01
 begin
 	s = 0:0.001:sₜₒₜ
-	plot(s, [1.5*sin(3*si + π/2-π/6)-0.3 for si ∈ s]; label="k, 1/R", size=(600,200))
+	plot(s, [1.5*sin(3*si + π/2-π/6)-0.3 for si ∈ s]; legend=false, size=(600,200))
 end
 
 # ╔═╡ ab76b7f9-f505-4220-be4b-83ffd3d88558
-function v_ref(R, s, sₜₒₜ; s₀=0.25, Lₐ=0.193, Lᵣ=0.171, L=0.17, kₐ=8, kᵣ=20, 
-	acc_dist=0.5, scale=0.184, expn=1.5, vₘᵢₙ=0.02)
+function v_ref(R, s, sₜₒₜ; sₐ=0.25, sᵣ=0.125, Lₐ=0.193, Lᵣ=0.171, vₘₐₓ=0.17, vₘᵢₙ=0.02, 
+	kₐ=8, kᵣ=40, acc_dist=0.5, dacc_dist=0.25, scale=0.184, expn=1.5, vₘᵢₙ_dist=0.1)
 	if s < 0 || s ≥ sₜₒₜ
 		return 0
 	end
@@ -316,52 +320,101 @@ function v_ref(R, s, sₜₒₜ; s₀=0.25, Lₐ=0.193, Lᵣ=0.171, L=0.17, kₐ
 	
 	# base velocity profile over the entire reference path
 	acc_profile  = (s) -> (0 ≤ s < acc_dist) ? 
-					Lₐ * logistic(kₐ * (s - s₀)) : L
-	retd_profile = (s, sₜₒₜ) -> (0 ≤ sₜₒₜ - s < acc_dist) ? 
-					Lᵣ * logistic(kᵣ * (sₜₒₜ - s - s₀)) : L
+					Lₐ * logistic(kₐ * (s - sₐ)) : vₘₐₓ
+	retd_profile = (s, sₜₒₜ) -> (0 ≤ s < sₜₒₜ - dacc_dist) ? 
+					vₘₐₓ : Lᵣ * logistic(kᵣ * (sₜₒₜ - s - sᵣ))
 	base_profile = (s, sₜₒₜ) -> min(acc_profile(s), retd_profile(s, sₜₒₜ))
 	
-	# combined and clamped vel prof
+	# combined (curvature and base) and clamped velocity profiles
 	vel_profile   = (R, s, sₜₒₜ) -> min(base_profile(s, sₜₒₜ), curvature_profile(R))
-	clamp_profile = (R, s, sₜₒₜ) -> (0 ≤ sₜₒₜ - s < acc_dist) ? 
-					 vel_profile(R, s, sₜₒₜ) : max(vel_profile(R, s, sₜₒₜ), vₘᵢₙ)
+	clamp_profile = (R, s, sₜₒₜ) -> (0 ≤ s < sₜₒₜ - vₘᵢₙ_dist) ? 
+					 max(vel_profile(R, s, sₜₒₜ), vₘᵢₙ) : vel_profile(R, s, sₜₒₜ)
 	
 	return clamp_profile(R, s, sₜₒₜ)
 end
 
 # ╔═╡ 21bcf487-7a7a-49cd-a3be-936e01e69f50
 begin
-	plot(s, [v_ref(1/(1.5*sin(3*si + π/2-π/6)-0.3), si, sₜₒₜ) for si ∈ s]; 
-		aspect_ratio=:equal, ylims=(0,0.20), label="v (m/s)", size=(600,200))
+	plot(s, [v_ref(Inf, si, sₜₒₜ) for si ∈ s]; #1/(1.5*sin(3*si + π/2-π/6)-0.3)
+		aspect_ratio=:equal, ylims=(0,0.20), legend=false, size=(600,200))
+end
+
+# ╔═╡ 077a4875-37ae-4652-87f7-dcaf864b69c7
+@with_kw mutable struct PIDParams
+	kp::Real
+	ki::Real
+	kd::Real
+	Δt::Real    = Inf
+	vₙ₋₁::Real  = 0.0
+	ωₙ₋₁::Real  = 0.0
+	Ivₙ₋₁::Real = 0.0
+	Iωₙ₋₁::Real = 0.0
 end
 
 # ╔═╡ 04b9573b-0d55-42e6-9a66-ab37ee254244
-function gen_control_cmd(ξᵣ, pₛₑₜ, pid_params, v_ref)
-	R, Δθ = calc_connecting_arc_params(ξᵣ, ξₛₑₜ)
-	# get v_ref, ω_ref
-	# do colinearity check for input and setpoint (for forward and reverse)
-	# do PID
-	# return result (u = [v ω])
-	# s = R * abs(Δθ)
-	# Δt = s/0.17
-	# ω = Δθ/Δt
+function gen_control_cmd(ξᵣ, pₛₑₜ, pid_params, s, sₜₒₜ, v_ref; vₘₐₓ=0.17, ωₘₐₓ=π/2)
+	@unpack kp, ki, kd, Δt, vₙ₋₁, ωₙ₋₁, Ivₙ₋₁, Iωₙ₋₁ = pid_params
+	
+	R, Δθ = calc_connecting_arc_params(ξᵣ, pₛₑₜ)
+	vₛₑₜ  = v_ref(R, s, sₜₒₜ)
+	ωₛₑₜ  = vₛₑₜ/R * sign(Δθ)
+	
+	if vₛₑₜ === NaN || ωₛₑₜ === NaN
+		return (v=vₙ₋₁, ω=ωₙ₋₁)
+	end
+	
+	# PID control law
+	Δv =  vₛₑₜ - vₙ₋₁
+	Δω =  ωₛₑₜ - ωₙ₋₁
+	v  =  vₙ₋₁ + kp * Δv + ki * (Δv*Δt + Ivₙ₋₁) + kd * Δv/Δt
+	ω  =  ωₙ₋₁ + kp * Δω + ki * (Δω*Δt + Iωₙ₋₁) + kd * Δω/Δt
+	
+	Ivₙ₋₁ += Δv * Δt
+	Iωₙ₋₁ += Δω * Δt
+	
+	# return after clamping ω to [-ωₘₐₓ, -ωₘₐₓ] and v to [0,vₘₐₓ]
+	v = sign(v) * min(abs(v), vₘₐₓ) |> v -> max(v, 0.0)
+	ω = sign(ω) * min(abs(ω), ωₘₐₓ)
+	vₙ₋₁   = v
+	ωₙ₋₁   = ω
+	return (v=v, ω=ω)
 end
 
 # ╔═╡ 255a318d-68de-4246-be83-2e94b3e059a1
-function control_loop(ref_path, v_ref, pid_params, ctrl_rate_hz=60;
-	𝒵=[Dirac(0), Dirac(0)], 𝒟=Dirac(0))
-	# while setpnt_idx ≤ length(ref_path)
-		# update set point
-		# step fwd
-		# update sum of squared errors
-		# update control error
+function control_loop(ξᵣ, ref_path, v_ref, pid_params, timelim=10.0; ## temp variable 
+	ctrl_rate_hz=60, stol=1.15, 𝒵=(v=Dirac(0), ω=Dirac(0)), 𝒟=Dirac(0))
+	s    = 0; setpnt_idx = 1; Σd⊥² = 0
+	sₜₒₜ = stol * compute_sₜₒₜ(ref_path)
+	@unpack Δt = pid_params; Δt = 1/ctrl_rate_hz
+	ctrl_path = Vector{Point2}(); ξs = Vector{Pose2}()
+	vs = Vector{Float64}(); ωs = Vector{Float64}()
 	
-	return (ctrl_path=ctrl_path, rmse=√(Σd⊥²/length(ctrl_path)))
+	#### temp code
+	_done = (lim) -> time_ns() > lim
+	time_from_now = (s) -> round(Int, 10^9 * s + time_ns())
+	limit = time_from_now(timelim)
+	#### temp code
+	
+	
+	while setpnt_idx ≤ length(ref_path) && !_done(limit)
+		Σd⊥² += squared_perp_error(ξᵣ, setpnt_idx, ref_path)
+		pₛₑₜ = ref_path[setpnt_idx]
+		u = gen_control_cmd(ξᵣ, pₛₑₜ, pid_params, s, sₜₒₜ, v_ref)
+		ξ̂ᵣ = simulate_fwd(ξᵣ, u, Δt, 𝒵, 𝒟)
+		s += norm(Point2(ξ̂ᵣ) - Point2(ξᵣ)); ξᵣ = ξ̂ᵣ
+		push!(ctrl_path, Point2(ξᵣ)); push!(ξs, ξᵣ); push!(vs, u.v); push!(ωs, u.ω)
+		update_setpoint!(ξᵣ, setpnt_idx, ref_path)
+	end
+	
+	return (ctrl_path=ctrl_path, ξs=ξs, rmse=√(Σd⊥²/length(ctrl_path)), v=vs, ω=ωs)
 end
 
-# ╔═╡ cf39899f-f788-47de-a617-8d9dce286bc5
-# create 𝒵, 𝒟: μ_v_noise=0, σ_v_noise=0, μ_ω_noise=0, σ_ω_noise=0, λ_delay=Inf
-# call control_loop()
+# ╔═╡ e64a41aa-a3be-4ce2-90c1-5755a7385141
+md"
+
+Note/TODO: rotate on spot state can be added to the controller if (prev) setpoint and curr pose have very different yaw -- upon reaching within radius.
+
+"
 
 # ╔═╡ 275ef943-ea9a-4809-a7a5-90178fa3d594
 md"
@@ -438,10 +491,19 @@ Plot lin and ang vel over time/distance as well and also generate acc and jerk c
 
 "
 
+# ╔═╡ 208326af-8dae-4464-b185-433f466aa698
+md"
+
+Problems with this design:
+- In case at end, but more than stot, or less than stot, there would be an abrupt stop and inability to correct. Therefore, the internal velocity reference should depend on:
+v(s\_connect, s\_traversed, s\_tot). If there is enough s_connect (R*Δθ) left near the end (strav ≈ stot), then that should be dominant and the velocity ref should wrap. Behaves as a feedforward controller intitally and automatically changes to a feedback-feedforward hybrid controller near the end to close the gap.
+
+"
+
 # ╔═╡ ffdbd654-7bab-4879-ab71-8489827b64c4
 md"
 
-Robot starting pose, $\xi_\text{r}$, is ($(@bind ξᵣ_x Scrubbable(0:0.1:6.8*dist_per_100px; default=3.4*dist_per_100px))m, $(@bind ξᵣ_y Scrubbable(0:0.1:2.5*dist_per_100px; default=1.25*dist_per_100px))m, $(@bind ξᵣ_θ° Scrubbable(-180:5:180; default=0))°). The user input path is stored as a vector of `Point2` in `ref_path`.
+Robot starting pose, $\xi_\text{start}$, is ($(@bind ξᵣ_x Scrubbable(0:0.1:6.8*dist_per_100px; default=3.4*dist_per_100px))m, $(@bind ξᵣ_y Scrubbable(0:0.1:2.5*dist_per_100px; default=1.25*dist_per_100px))m, $(@bind ξᵣ_θ° Scrubbable(-180:5:180; default=0))°). The user input path is stored as a vector of `Point2` in `ref_path`.
 
 "
 
@@ -454,8 +516,8 @@ begin
 		plot(; aspect_ratio=:equal, xlims=(0,xmax), ylims=(0,ymax))
 		ref_path = Vector{Point2}(Point2.(drawing[2] .* coord_scale_factor))
 		plot_path(ref_path; label="Reference Path")
-		ξᵣ = Pose2(ξᵣ_x, ξᵣ_y, deg2rad(ξᵣ_θ°))
-		plot_pose(ξᵣ; legend=true, color="orange")
+		ξₛₜₐᵣₜ = Pose2(ξᵣ_x, ξᵣ_y, deg2rad(ξᵣ_θ°))
+		plot_pose(ξₛₜₐᵣₜ; legend=true, color="orange")
 		xlabel!("x (m)")
 		ylabel!("y (m)")
 		
@@ -464,13 +526,44 @@ begin
 		# 	plot_pose(ξᵣ; legend=true, color="orange")
 		# end
 		# gif(anim, "tutorial_anim_fps30.gif", fps = 30)
+	else
+		ref_path = Vector{Point2}()
 	end
 end
+
+# ╔═╡ cdea4a7b-75f1-41eb-bfe6-b3df202d6508
+md"
+Time limit, `timelim` =
+$(@bind timelim Slider(0.001:0.001:0.1; default=0.01, show_value=true))
+"
+
+# ╔═╡ cf39899f-f788-47de-a617-8d9dce286bc5
+begin
+	# create 𝒵, 𝒟: μ_v_noise=0, σ_v_noise=0, μ_ω_noise=0, σ_ω_noise=0, λ_delay=0
+	pid_params = PIDParams(kp=0.6,	ki=0.025, kd=0.01)
+	ctrl_path, ξs, rmse, vs, ωs = control_loop(ξₛₜₐᵣₜ, ref_path, v_ref, pid_params, timelim)
+	plot(; aspect_ratio=:equal, xlims=(0,xmax), ylims=(0,ymax))
+	plot_path(ctrl_path; label="Control Path", color="orange")
+	plot_path(ref_path; label="Reference Path", color="black")
+	plot_pose(last(ξs); color="orange", legend=true)
+end
+
+# ╔═╡ 526d869a-d90f-4a3f-97db-b3e516fb199c
+plot(1:length(ctrl_path), vs)
+
+# ╔═╡ 351d40d1-4cef-46d0-a815-439f568d75a8
+plot(1:length(ctrl_path), ωs)
+
+# ╔═╡ 2a9c08c3-e7dc-4f7b-90ef-963a975552ac
+rmse
 
 # ╔═╡ 859bdb5a-c284-4dfe-873c-ea73f3697dbd
 md"
 ## Tuning in Simulation
 Genetic algo based pid tuner for candidate traj: straight, circular, rectangular, wavy sinusoid, mix of all.
+
+Can use GA, Morbit, BBOpt, or proper digital sys/controller autotuning routines.
+By design, ideally, kp + ki/60 + kd*60 ≈ 1
 
 "
 
@@ -1750,25 +1843,32 @@ version = "0.9.1+5"
 # ╟─63c86eca-9176-11eb-1407-3bd19ccfcb7e
 # ╟─08f327c7-5235-4264-afda-d494b20c96c9
 # ╠═6788d28b-c550-4d45-8cc2-f45376b3d95f
-# ╠═1c3e7e4b-fca2-4e2a-b74d-dbd85b639b92
 # ╟─9530b918-b963-42c7-8334-4319d6441df3
 # ╟─1e324dd1-c3da-4c9f-ae8e-336ab83560d5
 # ╠═8981de3f-f201-40b4-a154-12cc87203061
 # ╠═b5c84b28-15b8-4c3c-ac57-ef29e4a7a71d
 # ╟─104e1584-9f6c-42b8-815a-907a852fbae8
+# ╠═7c3778d8-6fcc-46cf-86d4-579afd3dbab3
 # ╠═de0b5b41-a210-48c9-a159-3c36638d8380
 # ╟─129b46c7-9ad5-42e5-adf1-df6fd4ddb1d1
 # ╟─9147c226-4718-4c18-9369-ff4122a5abcb
 # ╟─82e75bef-ad2a-4ddc-92db-28a1565f2d01
-# ╠═21bcf487-7a7a-49cd-a3be-936e01e69f50
+# ╟─21bcf487-7a7a-49cd-a3be-936e01e69f50
 # ╠═ab76b7f9-f505-4220-be4b-83ffd3d88558
+# ╠═077a4875-37ae-4652-87f7-dcaf864b69c7
 # ╠═04b9573b-0d55-42e6-9a66-ab37ee254244
 # ╠═255a318d-68de-4246-be83-2e94b3e059a1
-# ╠═cf39899f-f788-47de-a617-8d9dce286bc5
+# ╟─e64a41aa-a3be-4ce2-90c1-5755a7385141
 # ╟─275ef943-ea9a-4809-a7a5-90178fa3d594
 # ╟─95ad3a95-9177-4d93-8ade-d8999beb1d42
+# ╟─208326af-8dae-4464-b185-433f466aa698
 # ╟─ffdbd654-7bab-4879-ab71-8489827b64c4
 # ╟─405803a6-eadd-410c-9f2f-182cb85f63ca
+# ╟─cdea4a7b-75f1-41eb-bfe6-b3df202d6508
+# ╠═cf39899f-f788-47de-a617-8d9dce286bc5
+# ╠═526d869a-d90f-4a3f-97db-b3e516fb199c
+# ╠═351d40d1-4cef-46d0-a815-439f568d75a8
+# ╠═2a9c08c3-e7dc-4f7b-90ef-963a975552ac
 # ╟─859bdb5a-c284-4dfe-873c-ea73f3697dbd
 # ╟─21b5474a-bc5e-4f9f-b211-aa34a72c57ed
 # ╠═322e91e0-8ea2-11eb-30c5-23cad2905fe3
