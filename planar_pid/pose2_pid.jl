@@ -69,6 +69,12 @@ Therefore, at each timestep, the following steps happen in order:
 
 Note, $\theta$ is projected as we can be at any pose away from the reference pose and the calulcated pose. We need to drive towards reference at each time point as so by keeping speed as a pivot (const), we reculate theta dot.
 
+Note/TODO:
+- The documentation is incomplete.
+- The current controller setup is buggy (looping behavior for some convergence radius and starting pose and so on)
+- The controller code needs some more clear writing and lesser extraneous operations. Faster and more robust perf.
+- Needs autotuning option for multi-objective of rms pos tracking, rms velocity tracking, rms jerk, and so on.
+
 "
 
 # ╔═╡ d47f60ac-22ac-4a37-ac7c-9c42c9090333
@@ -205,7 +211,7 @@ end
 # setpnt_idx:
 # ref_path:
 # radius:  
-function update_setpoint(ξᵣ, setpnt_idx, ref_path; radius=25e-2)
+function update_setpoint(ξᵣ, setpnt_idx, ref_path; radius=10e-2)
 	pᵣ = Point2(ξᵣ)
 	
 	if 1 ≤ setpnt_idx ≤ length(ref_path) && norm(pᵣ - ref_path[setpnt_idx]) < radius
@@ -338,7 +344,7 @@ end
 
 # ╔═╡ 21bcf487-7a7a-49cd-a3be-936e01e69f50
 begin
-	plot(s, [v_ref(Inf, si, sₜₒₜ) for si ∈ s]; #1/(1.5*sin(3*si + π/2-π/6)-0.3)
+	plot(s, [v_ref(1/(1.5*sin(3*si + π/2-π/6)-0.3), si, sₜₒₜ) for si ∈ s]; #
 		aspect_ratio=:equal, ylims=(0,0.20), legend=false, size=(600,200))
 end
 
