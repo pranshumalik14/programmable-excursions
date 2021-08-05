@@ -226,7 +226,7 @@ md"
 
 Parametrize reference path over t, and the perpendicular disrance can be defined as
 
-$d_{p,i\perp r_p} = \min_s{} , s \in [0,1]$
+$d_{p,i\perp r_p} = \min_s{\sqrt{(r_{p,x}(s) − p_{x,i})^2 + (r_{p,y}(s) − p_{y,i})^2 + (r_{p,z}(s) − p_{z,i})^2}} , s \in [0,s_\text{tot}]$
 
 $\text{RMSE} = \sqrt{\frac{\displaystyle \sum^N_{i=1} d_{p,i\perp r_p}^2}{N}}$
 
@@ -524,17 +524,20 @@ begin
 		coord_scale_factor = dist_per_100px/100
 		plot(; aspect_ratio=:equal, xlims=(0,xmax), ylims=(0,ymax))
 		ref_path = Vector{Point2}(Point2.(drawing[2] .* coord_scale_factor))
-		plot_path(ref_path; label="Reference Path")
+		# plot_path(ref_path; label="Reference Path")
 		ξₛₜₐᵣₜ = Pose2(ξᵣ_x, ξᵣ_y, deg2rad(ξᵣ_θ°))
-		plot_pose(ξₛₜₐᵣₜ; legend=true, color="orange")
-		xlabel!("x (m)")
-		ylabel!("y (m)")
-		
-		# anim = @animate for i = 1:df:length(x)
-		# 	plot(ctrl_path_x[1:i], ctrl_path_y[1:i]; label="Controller Path")
-		# 	plot_pose(ξᵣ; legend=true, color="orange")
-		# end
-		# gif(anim, "tutorial_anim_fps30.gif", fps = 30)
+		# plot_pose(ξₛₜₐᵣₜ; legend=true, color="orange")
+		pid_params = PIDParams(kp=0.6,	ki=0.025, kd=0.01)
+		ctrl_path, ξs, rmse, vs, ωs = control_loop(ξₛₜₐᵣₜ, ref_path, v_ref, pid_params)
+		anim = @animate for i = 1:100:length(ctrl_path)
+			plot(; aspect_ratio=:equal, xlims=(0,xmax), ylims=(0,ymax))
+			plot_path(ref_path; label="Reference Path", color="black")
+			plot_path(ctrl_path[1:i]; label="Controller Path", color="orange")
+			plot_pose(ξs[i]; color="orange", legend=true)
+			xlabel!("x (m)")
+			ylabel!("y (m)")
+		end
+		gif(anim, "feedforward_demo.gif", fps = 7)
 	else
 		ref_path = Vector{Point2}()
 	end
@@ -543,28 +546,22 @@ end
 # ╔═╡ cdea4a7b-75f1-41eb-bfe6-b3df202d6508
 md"
 Time limit, `timelim` =
-$(@bind timelim Slider(0.001:0.001:1.5; default=0.01, show_value=true))
+$(@bind timelim Slider(0.001:0.001:3; default=0.01, show_value=true))
 "
 
 # ╔═╡ cf39899f-f788-47de-a617-8d9dce286bc5
 begin
 	# create 𝒵, 𝒟: μ_v_noise=0, σ_v_noise=0, μ_ω_noise=0, σ_ω_noise=0, λ_delay=0
-	pid_params = PIDParams(kp=0.6,	ki=0.025, kd=0.01)
-	ctrl_path, ξs, rmse, vs, ωs = control_loop(ξₛₜₐᵣₜ, ref_path, v_ref, pid_params, timelim)
-	plot(; aspect_ratio=:equal, xlims=(0,xmax), ylims=(0,ymax))
-	plot_path(ctrl_path; label="Control Path", color="orange")
-	plot_path(ref_path; label="Reference Path", color="black")
-	plot_pose(last(ξs); color="orange", legend=true)
+	# pid_params = PIDParams(kp=0.6,	ki=0.025, kd=0.01)
+	# ctrl_path, ξs, rmse, vs, ωs = control_loop(ξₛₜₐᵣₜ, ref_path, v_ref, pid_params, timelim)
+	# plot(; aspect_ratio=:equal, xlims=(0,xmax), ylims=(0,ymax))
+	# plot_path(ctrl_path; label="Control Path", color="orange")
+	# plot_path(ref_path; label="Reference Path", color="black")
+	# plot_pose(last(ξs); color="orange", legend=true)
 end
 
 # ╔═╡ 2a9c08c3-e7dc-4f7b-90ef-963a975552ac
 rmse
-
-# ╔═╡ 526d869a-d90f-4a3f-97db-b3e516fb199c
-plot(1:length(ctrl_path), vs; ylims=(0, 0.2))
-
-# ╔═╡ 351d40d1-4cef-46d0-a815-439f568d75a8
-plot(1:length(ctrl_path), ωs)
 
 # ╔═╡ 859bdb5a-c284-4dfe-873c-ea73f3697dbd
 md"
@@ -1874,10 +1871,8 @@ version = "0.9.1+5"
 # ╟─ffdbd654-7bab-4879-ab71-8489827b64c4
 # ╟─405803a6-eadd-410c-9f2f-182cb85f63ca
 # ╟─cdea4a7b-75f1-41eb-bfe6-b3df202d6508
-# ╟─cf39899f-f788-47de-a617-8d9dce286bc5
+# ╠═cf39899f-f788-47de-a617-8d9dce286bc5
 # ╠═2a9c08c3-e7dc-4f7b-90ef-963a975552ac
-# ╠═526d869a-d90f-4a3f-97db-b3e516fb199c
-# ╠═351d40d1-4cef-46d0-a815-439f568d75a8
 # ╟─859bdb5a-c284-4dfe-873c-ea73f3697dbd
 # ╟─21b5474a-bc5e-4f9f-b211-aa34a72c57ed
 # ╠═322e91e0-8ea2-11eb-30c5-23cad2905fe3
