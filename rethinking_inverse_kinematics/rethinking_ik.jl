@@ -124,10 +124,10 @@ We would like to move towards multitple targets from one location, to best estim
 "
 
 # ╔═╡ 11df4564-3e6e-4e7a-bf3d-ce2da8745db0
-xts, yts = sample_ℛ(l₂-l₁, l₂+l₁, 5)
+xts, yts = sample_ℛ(l₂-l₁, l₂+l₁, 100)
 
 # ╔═╡ 5b2d2621-dcc7-4856-aa65-9da7f2013c6a
-[plot_env(l₁, l₂, q₁, q₂, xₜ, yₜ) for xₜ ∈ xts, yₜ ∈ yts][1:end]
+plots = [plot_env(l₁, l₂, q₁, q₂, xts[i], yts[i]) for i ∈ 1:length(xts)]
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
