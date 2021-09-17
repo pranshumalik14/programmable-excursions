@@ -26,6 +26,20 @@ md"
 
 "
 
+# ╔═╡ b2d95aa7-e6b7-4fcb-bc28-6cc9077e9d98
+md"
+
+We would like to explore techniques inspired from human developmental processes (e.g. motor babbling), to see if a robotic arm can learn to reach points in space, perhaps also moving points as an extension.
+
+"
+
+# ╔═╡ 6095efdb-2211-47e8-8e97-928bbe18992e
+md"
+
+## Setting up the environment
+
+"
+
 # ╔═╡ a59d5be1-3d70-4aea-8966-f99bac45a97f
 function plot_arm(l₁, l₂, q₁, q₂; alpha=1.0)
 	x = [0, l₁*cos(q₁), l₂*cos(q₁+q₂) + l₁*cos(q₁)]
@@ -36,32 +50,32 @@ end
 # ╔═╡ bf99dfaf-3868-4475-84cd-48521a7c9eb9
 md"
 
-The reach targets are uniformly distributed over the reachbility space, $\mathcal{R}$, wich is an annular region from radius $l_1$ to radius $l_2$.
+The reach targets are uniformly distributed over the reachbility space, $\mathcal{R}$, wich is an annular region from radius $l_2 - l_1$ to radius $l_2 + l_1$.
 
 "
 
 # ╔═╡ ed2a2ad8-aed4-413e-ae4b-30529e67eb27
-function sample_ℛ(l₁, l₂, n=1)
-	R = sqrt.((l₂^2 - l₁^2) .* rand(n) .+ l₁^2)
+function sample_ℛ(R₁, R₂, n=1)
+	R = sqrt.((R₂^2 - R₁^2) .* rand(n) .+ R₁^2)
 	θ = 2π .* rand(n)
 	return (xₜ=R.*cos.(θ), yₜ=R.*sin.(θ))
 end
 
 # ╔═╡ 2a180656-ffe7-420d-a2c4-982cf6b6bbdf
 function plot_target(xₜ, yₜ)
-	scatter!(xₜ, yₜ; markercolor="orange", markersize=7, markershape=:star5)
+	scatter!([xₜ], [yₜ]; markercolor="orange", markersize=7, markershape=:star5)
 end
 
 # ╔═╡ ee1f2a0d-1305-4203-9be0-c731d559bbc6
 function plot_error_vec(xₛ, yₛ, xₜ, yₜ)
-	plot!([xₛ xₜ][1:end], [yₛ yₜ][1:end]; arrow=true, alpha=0.2, linewidth=2, color="black")
+	plot!([xₛ xₜ][:], [yₛ yₜ][:]; arrow=true, alpha=0.2, linewidth=2, color="black")
 end
 
 # ╔═╡ 74043d37-3738-4de3-aa76-4a81c8af8ce0
 function plot_env(l₁, l₂, q₁, q₂, xₜ, yₜ)
 	plot_arm(l₁, l₂, q₁, q₂)
-	xₛ = [l₂*cos(q₁+q₂) + l₁*cos(q₁)]
-	yₛ = [l₂*sin(q₁+q₂) + l₁*sin(q₁)]
+	xₛ = l₂*cos(q₁+q₂) + l₁*cos(q₁)
+	yₛ = l₂*sin(q₁+q₂) + l₁*sin(q₁)
 	plot_error_vec(xₛ, yₛ, xₜ, yₜ)
 	plot_target(xₜ, yₜ)
 end
@@ -80,6 +94,9 @@ l₂ $(@bind l₂ Slider(0:0.01:1; show_value=true, default=0.5))
 
 "
 
+# ╔═╡ 986b1729-4a97-4f46-8496-44ec5886325d
+xₜ, yₜ = sample_ℛ(l₂-l₁, l₂+l₁)
+
 # ╔═╡ beec58b0-b89e-4429-be45-b0cc185d6269
 md"
 
@@ -94,11 +111,23 @@ q₂ $(@bind q₂ Slider(0:π/12:2π; show_value=true, default=π/3))
 
 "
 
-# ╔═╡ 986b1729-4a97-4f46-8496-44ec5886325d
-xₜ, yₜ = sample_ℛ(l₁, l₂)
-
 # ╔═╡ 7ab70290-c6c7-4cb3-858e-7b8de0387c5f
 plot_env(l₁, l₂, q₁, q₂, xₜ, yₜ)
+
+# ╔═╡ 7b826190-a381-48ad-9c64-a99f1c78ef34
+md"
+
+## Motor Babbling
+
+We would like to move towards multitple targets from one location, to best estimate or learn J(q). Alternatively, we can also explore if we can just learn to move along the error vectors (to the same target) from randomly spawned initial congurations. In either case, we need to see how long we need to simulate each action, how to keep track of \"learnt\" actions, and efficient online recall.
+
+"
+
+# ╔═╡ 11df4564-3e6e-4e7a-bf3d-ce2da8745db0
+xts, yts = sample_ℛ(l₂-l₁, l₂+l₁, 5)
+
+# ╔═╡ 5b2d2621-dcc7-4856-aa65-9da7f2013c6a
+[plot_env(l₁, l₂, q₁, q₂, xₜ, yₜ) for xₜ ∈ xts, yₜ ∈ yts][1:end]
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -932,9 +961,12 @@ version = "0.9.1+5"
 
 # ╔═╡ Cell order:
 # ╟─903fcaac-68d8-11eb-3914-87b6029cd760
+# ╟─b2d95aa7-e6b7-4fcb-bc28-6cc9077e9d98
+# ╟─6095efdb-2211-47e8-8e97-928bbe18992e
 # ╠═a59d5be1-3d70-4aea-8966-f99bac45a97f
 # ╟─bf99dfaf-3868-4475-84cd-48521a7c9eb9
 # ╠═ed2a2ad8-aed4-413e-ae4b-30529e67eb27
+# ╠═986b1729-4a97-4f46-8496-44ec5886325d
 # ╠═2a180656-ffe7-420d-a2c4-982cf6b6bbdf
 # ╠═ee1f2a0d-1305-4203-9be0-c731d559bbc6
 # ╠═74043d37-3738-4de3-aa76-4a81c8af8ce0
@@ -942,8 +974,10 @@ version = "0.9.1+5"
 # ╟─338c4ea4-3d37-4fcc-8148-b53610036809
 # ╟─beec58b0-b89e-4429-be45-b0cc185d6269
 # ╟─ab878ee2-9aaf-4042-93c3-bf90d45572e9
-# ╠═986b1729-4a97-4f46-8496-44ec5886325d
 # ╠═7ab70290-c6c7-4cb3-858e-7b8de0387c5f
+# ╟─7b826190-a381-48ad-9c64-a99f1c78ef34
+# ╠═11df4564-3e6e-4e7a-bf3d-ce2da8745db0
+# ╠═5b2d2621-dcc7-4856-aa65-9da7f2013c6a
 # ╟─7530c138-0579-499b-b4ba-fc61d2c60d47
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
