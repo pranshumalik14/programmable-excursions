@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.16.0
+# v0.16.1
 
 using Markdown
 using InteractiveUtils
@@ -124,7 +124,7 @@ We would like to move towards multitple targets from one location, to best estim
 "
 
 # ╔═╡ 11df4564-3e6e-4e7a-bf3d-ce2da8745db0
-xts, yts = sample_ℛ(l₂-l₁, l₂+l₁, 100)
+xts, yts = sample_ℛ(l₂-l₁, l₂+l₁, 1000)
 
 # ╔═╡ 5b2d2621-dcc7-4856-aa65-9da7f2013c6a
 plots = [plot_env(l₁, l₂, q₁, q₂, xts[i], yts[i]) for i ∈ 1:length(xts)]
