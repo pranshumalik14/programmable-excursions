@@ -5,7 +5,7 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ f09bf238-f52c-4c24-a39a-66c6d570fcf4
-using DifferentialEquations, Plots, StaticArrays, UnPack
+using LinearAlgebra, DifferentialEquations, Plots, StaticArrays, UnPack
 
 # ╔═╡ 0c41a6b8-eff2-11ec-083c-cd8a2b0bfd14
 md"
@@ -48,42 +48,41 @@ I₁ = 1/3m₁*lc₁^2; I₂ = 1/3m₂*lc₂^2; # upper and forearm inertias
 g = 9.81; # gravitational acceleration
 
 # ╔═╡ a32a1c33-d68e-4915-adb8-4f6c1366b3e0
-M(q) = @SMatrix [m₁*lc₁^2+m₂*(l₁^2+lc₂^2+2l₁*lc₂*cos(q[2]))+I₁+I₂ m₂*(lc₂^2+l₁*lc₂*cos(q[2]))+I₂; m₂*(lc₂^2+l₁*lc₂*cos(q[2]))+I₂ m₂*lc₂^2+I₂]
+M(q) = [m₁*lc₁^2+m₂*(l₁^2+lc₂^2+2l₁*lc₂*cos(q[2]))+I₁+I₂ m₂*(lc₂^2+l₁*lc₂*cos(q[2]))+I₂; m₂*(lc₂^2+l₁*lc₂*cos(q[2]))+I₂ m₂*lc₂^2+I₂]
 
 # ╔═╡ d8aeaef7-85a0-4ad9-a59b-56d72ff16ff9
-C(q, q̇) = @SMatrix [-m₂*l₁*lc₂*sin(q[2])*q̇[2] -m₂*l₁*lc₂*sin(q[2])*(q̇[1]+q̇[2]); 
-					m₂*l₁*lc₂*sin(q[2])*q̇[1] 0]
+C(q, q̇) = [-m₂*l₁*lc₂*sin(q[2])*q̇[2] -m₂*l₁*lc₂*sin(q[2])*(q̇[1]+q̇[2]); 
+		   m₂*l₁*lc₂*sin(q[2])*q̇[1] 0]
 
 # ╔═╡ 2f481697-de8c-4804-bd4d-c30c96c4a9ba
-∇P(q) = @SMatrix [(m₁*lc₁+m₂*l₁)*g*cos(q[1])+m₂*lc₂*g*cos(q[1]+q[2]);
-				  m₂*lc₂*g*cos(q[1]+q[2])]
+∇P(q) = [(m₁*lc₁+m₂*l₁)*g*cos(q[1])+m₂*lc₂*g*cos(q[1]+q[2]);
+		 m₂*lc₂*g*cos(q[1]+q[2])]
 
 # ╔═╡ d0c7a57c-663e-4f89-a767-b7772a732f4e
-Ȳ(q, q̇, a, v) = @SMatrix [a[1] cos(q[2])*(2a[1]+a[2])-sin(q[2])*(q̇[2]*v[1]+(q̇[1]+q̇[2])*v[2]) a[2] g*cos(q[1]) g*cos(q[1]+q[2]); 0 cos(q[2])*a[1]+sin(q[2])*q̇[1]*v[1] a[1]+a[2] 0 g*cos(q[1]+q[2])]
+Ȳ(q, q̇, a, v) = [a[1] cos(q[2])*(2a[1]+a[2])-sin(q[2])*(q̇[2]*v[1]+(q̇[1]+q̇[2])*v[2]) a[2] g*cos(q[1]) g*cos(q[1]+q[2]); 0 cos(q[2])*a[1]+sin(q[2])*q̇[1]*v[1] a[1]+a[2] 0 g*cos(q[1]+q[2])]
 
 # ╔═╡ f8b13ccd-1193-4d75-ae6a-11600f29020d
 begin
 	# reference signals
-	qref(t) = @SMatrix [sin(2t); sin(t)]
-	q̇ref(t) = @SMatrix [2cos(2t); cos(t)]
-	q̈ref(t) = @SMatrix [-4sin(2t); -sin(t)]
+	qref(t) = [sin(2t); sin(t)]
+	q̇ref(t) = [2cos(2t); cos(t)]
+	q̈ref(t) = [-4sin(2t); -sin(t)]
 end;
 
 # ╔═╡ 15ff2cbf-0bc6-4c75-9c9e-422985c7eca9
-Θ̂₀ = @SMatrix [m₁*lc₁^2+m₂*(l₁^2+lc₂^2)+I₁+I₂; m₂*l₁*lc₂; 
-			   m₂*lc₂^2+I₂; m₁*lc₁+m₂*l₁; m₂*lc₂]
+Θ̂₀ = [m₁*lc₁^2+m₂*(l₁^2+lc₂^2)+I₁+I₂; m₂*l₁*lc₂; m₂*lc₂^2+I₂; m₁*lc₁+m₂*l₁; m₂*lc₂];
 
 # ╔═╡ 070f7f0b-90bd-44fe-9ac9-10f33aefe6ad
 qref₀ = qref(0); q̇ref₀ = q̇ref(0);
 
 # ╔═╡ a9db3c87-99c7-4074-b846-e7fd14c921b6
-λ₁ = 0.2; λ₂ = 0.2;
+λᵢ = fill(0.2, 2);
 
 # ╔═╡ 57299277-c95f-499f-ad99-cf5c7795136e
-k₁ = 0.4; k₂ = 0.4;
+kᵢ = fill(0.4, 2);
 
 # ╔═╡ d157a507-f38d-4d36-8f94-9ed0b5d0b4c8
-γ₁ = 0.8; γ₂ = 0.8;
+γᵢ = fill(0.8, 5);
 
 # ╔═╡ 1f910dfe-5cf8-42a2-8c1c-ea01d9fcfbf6
 function q̈(q̇, q, Θ̂, p, t)
@@ -92,7 +91,7 @@ function q̈(q̇, q, Θ̂, p, t)
 	v = q̇r(t) + Λ*(qr(t)-q)
 	r = (q̇r(t)-q̇) + Λ*(qr(t)-q)
 	u = Ȳ(q,q̇,a,v)*Θ̂ + K*r
-	return SVector{2}(inv(M(q))*(u - (C(q,q̇)*q̇ + ∇P(q)))) # q̈
+	return inv(M(q))*(u - (C(q,q̇)*q̇ + ∇P(q))) # q̈
 end
 
 # ╔═╡ 73cc2dc4-1328-4e6a-aa6d-bcf0ed287d62
@@ -101,7 +100,7 @@ function Θ̂̇(q̇, q, Θ̂, p, t)
 	a = q̈r(t) + Λ*(q̇r(t)-q̇)
 	v = q̇r(t) + Λ*(qr(t)-q)
 	r = (q̇r(t)-q̇) + Λ*(qr(t)-q)
-	return SVector{2}(inv(Γ)*Ȳ(q,q̇,a,v)*r) # dΘ̂
+	return inv(Γ)*Ȳ(q,q̇,a,v)'*r # Θ̂̇
 end
 
 # ╔═╡ 5d075e8d-ed5d-432a-ad62-762d3488a96d
@@ -116,8 +115,7 @@ end
 # ╔═╡ 3a6a9552-ad52-445b-8469-8e8842bf6d54
 begin
 	# ode setup
-	p = (qr=qref, q̇r=q̇ref, q̈r=q̈ref, Λ=SMatrix{2,2}([λ₁ 0; 0 λ₂]), 
-	 	 K=SMatrix{2,2}([k₁ 0; 0 k₂]), Γ=SMatrix{2,2}([γ₁ 0; 0 γ₂]), 
+	p = (qr=qref, q̇r=q̇ref, q̈r=q̈ref, Λ=Diagonal(λᵢ), K=Diagonal(kᵢ), Γ=Diagonal(γᵢ), 
 	 	 M=M, C=C, ∇P=∇P, Ȳ=Ȳ)
 	u₀ = [q̇ref₀, qref₀, Θ̂₀]
 	param = [q̈, Θ̂̇, p]
@@ -179,12 +177,13 @@ begin
 			plot!(; title=title)
 		end
 	end
-end;
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
