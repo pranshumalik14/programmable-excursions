@@ -1,11 +1,33 @@
 ### A Pluto.jl notebook ###
 # v0.19.9
 
+#> [frontmatter]
+#> title = "Slotine-Li Adaptive Controller"
+#> date = "2022-06-21"
+#> tags = ["Robotics", " Adaptive Control", "Control Theory", "Motor Control"]
+#> description = "A demo"
+
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ f09bf238-f52c-4c24-a39a-66c6d570fcf4
-using LinearAlgebra, DifferentialEquations, Plots, StaticArrays, UnPack
+using LinearAlgebra, DifferentialEquations, Plots, StaticArrays, LaTeXStrings, UnPack, PlutoUI, OrderedCollections
+
+# ╔═╡ b519cf68-4dea-4436-b5f6-dbc9922adc73
+begin
+	using PlotThemes
+	theme(:dracula)
+end
 
 # ╔═╡ 0c41a6b8-eff2-11ec-083c-cd8a2b0bfd14
 md"
@@ -24,13 +46,16 @@ $$\boldsymbol{\Theta} =
 
 \end{bmatrix}$$
 
+### TODO: include a complete description of robot dynamics and derivation of the Slotine-Li adaptive controller.
+
 "
 
-# ╔═╡ c9435471-2965-49e2-8063-b6051e540895
-# allow custom tracking signal (by drawing or functional input)
-# solve multipart DE
-# get the evolution of Θ
-# get the evolution of tracking error
+# ╔═╡ 15cce339-52a6-4ef4-9300-2753a0204740
+md"
+
+We use realistic human-limb parameters and downwards gravity for simulating the arm dynamics.
+
+"
 
 # ╔═╡ 970cd6b4-4acb-4e80-9564-e7f1cb595c19
 m₁ = 1.75; m₂ = 0.95;   # upper and forearm masses
@@ -47,24 +72,36 @@ I₁ = 1/3m₁*lc₁^2; I₂ = 1/3m₂*lc₂^2; # upper and forearm inertias
 # ╔═╡ 449949ff-2403-4ac3-bb25-270308744fc0
 g = 9.81; # gravitational acceleration
 
+# ╔═╡ 0e0ff555-549e-4265-a341-a48f9a4deae4
+md"
+
+The mass matrix of the upper and forearm system is: 
+
+$$M(\mathbf{q}) = 
+\begin{bmatrix}
+1\\2
+\end{bmatrix}$$
+
+"
+
 # ╔═╡ a32a1c33-d68e-4915-adb8-4f6c1366b3e0
-M(q) = [m₁*lc₁^2+m₂*(l₁^2+lc₂^2+2l₁*lc₂*cos(q[2]))+I₁+I₂ m₂*(lc₂^2+l₁*lc₂*cos(q[2]))+I₂; m₂*(lc₂^2+l₁*lc₂*cos(q[2]))+I₂ m₂*lc₂^2+I₂]
+M(q) = @SMatrix [m₁*lc₁^2+m₂*(l₁^2+lc₂^2+2l₁*lc₂*cos(q[2]))+I₁+I₂ m₂*(lc₂^2+l₁*lc₂*cos(q[2]))+I₂; m₂*(lc₂^2+l₁*lc₂*cos(q[2]))+I₂ m₂*lc₂^2+I₂]
 
 # ╔═╡ d8aeaef7-85a0-4ad9-a59b-56d72ff16ff9
-C(q, q̇) = [-m₂*l₁*lc₂*sin(q[2])*q̇[2] -m₂*l₁*lc₂*sin(q[2])*(q̇[1]+q̇[2]); 
-		   m₂*l₁*lc₂*sin(q[2])*q̇[1] 0]
+C(q, q̇) = @SMatrix [-m₂*l₁*lc₂*sin(q[2])*q̇[2] -m₂*l₁*lc₂*sin(q[2])*(q̇[1]+q̇[2]); 
+		   			m₂*l₁*lc₂*sin(q[2])*q̇[1] 0]
 
 # ╔═╡ 2f481697-de8c-4804-bd4d-c30c96c4a9ba
-∇P(q) = [(m₁*lc₁+m₂*l₁)*g*cos(q[1])+m₂*lc₂*g*cos(q[1]+q[2]);
-		 m₂*lc₂*g*cos(q[1]+q[2])]
+∇P(q) = @SVector [(m₁*lc₁+m₂*l₁)*g*cos(q[1])+m₂*lc₂*g*cos(q[1]+q[2]);
+		 		  m₂*lc₂*g*cos(q[1]+q[2])]
 
 # ╔═╡ d0c7a57c-663e-4f89-a767-b7772a732f4e
-Ȳ(q, q̇, a, v) = [a[1] cos(q[2])*(2a[1]+a[2])-sin(q[2])*(q̇[2]*v[1]+(q̇[1]+q̇[2])*v[2]) a[2] g*cos(q[1]) g*cos(q[1]+q[2]); 0 cos(q[2])*a[1]+sin(q[2])*q̇[1]*v[1] a[1]+a[2] 0 g*cos(q[1]+q[2])]
+Ȳ(q, q̇, a, v) = @SMatrix [a[1] cos(q[2])*(2a[1]+a[2])-sin(q[2])*(q̇[2]*v[1]+(q̇[1]+q̇[2])*v[2]) a[2] g*cos(q[1]) g*cos(q[1]+q[2]); 0 cos(q[2])*a[1]+sin(q[2])*q̇[1]*v[1] a[1]+a[2] 0 g*cos(q[1]+q[2])]
 
 # ╔═╡ f8b13ccd-1193-4d75-ae6a-11600f29020d
 begin
 	# reference signals
-	qref(t) = [sin(2t); sin(t)]
+	qref(t) = [sin(2t); sin(t)] # offset +π/4
 	q̇ref(t) = [2cos(2t); cos(t)]
 	q̈ref(t) = [-4sin(2t); -sin(t)]
 end;
@@ -73,61 +110,63 @@ end;
 Θ̂₀ = [m₁*lc₁^2+m₂*(l₁^2+lc₂^2)+I₁+I₂; m₂*l₁*lc₂; m₂*lc₂^2+I₂; m₁*lc₁+m₂*l₁; m₂*lc₂];
 
 # ╔═╡ 070f7f0b-90bd-44fe-9ac9-10f33aefe6ad
-qref₀ = qref(0); q̇ref₀ = q̇ref(0);
+qref₀ = [π/6; π/3]; q̇ref₀ = q̇ref(0);
 
-# ╔═╡ a9db3c87-99c7-4074-b846-e7fd14c921b6
-λᵢ = fill(0.2, 2);
-
-# ╔═╡ 57299277-c95f-499f-ad99-cf5c7795136e
-kᵢ = fill(0.4, 2);
-
-# ╔═╡ d157a507-f38d-4d36-8f94-9ed0b5d0b4c8
-γᵢ = fill(0.8, 5);
+# ╔═╡ ecb1b0f6-5048-45ee-ab86-5423c3229101
+md"
+c = $(@bind c Slider(0.0:0.1:2; default=1.2, show_value=true))
+"
 
 # ╔═╡ 1f910dfe-5cf8-42a2-8c1c-ea01d9fcfbf6
-function q̈(q̇, q, Θ̂, p, t)
-	@unpack qr, q̇r, q̈r, Λ, K, M, C, ∇P, Ȳ = p
-	a = q̈r(t) + Λ*(q̇r(t)-q̇)
-	v = q̇r(t) + Λ*(qr(t)-q)
-	r = (q̇r(t)-q̇) + Λ*(qr(t)-q)
-	u = Ȳ(q,q̇,a,v)*Θ̂ + K*r
-	return inv(M(q))*(u - (C(q,q̇)*q̇ + ∇P(q))) # q̈
+function q̈(q, q̇, Θ̂, param, t)
+	@unpack qr, q̇r, q̈r, Λ, K, M, C, ∇P, Ȳ = param
+	a = SVector{2}(q̈r(t) + Λ*(q̇r(t)-q̇))
+	v = SVector{2}(q̇r(t) + Λ*(qr(t)-q))
+	r = SVector{2}((q̇r(t)-q̇) + Λ*(qr(t)-q))
+	u = SVector{2}(Ȳ(q,q̇,a,v)*Θ̂ + K*r)
+	return SVector{2}(inv(M(q))*(u - (C(q,q̇)*q̇ + ∇P(q)))) # q̈
 end
 
 # ╔═╡ 73cc2dc4-1328-4e6a-aa6d-bcf0ed287d62
-function Θ̂̇(q̇, q, Θ̂, p, t)
-	@unpack qr, q̇r, q̈r, Λ, Γ, Ȳ = p
-	a = q̈r(t) + Λ*(q̇r(t)-q̇)
-	v = q̇r(t) + Λ*(qr(t)-q)
-	r = (q̇r(t)-q̇) + Λ*(qr(t)-q)
-	return inv(Γ)*Ȳ(q,q̇,a,v)'*r # Θ̂̇
+function Θ̂̇(q, q̇, Θ̂, param, t)
+	@unpack qr, q̇r, q̈r, Λ, Γ, Ȳ = param
+	a = SVector{2}(q̈r(t) + Λ*(q̇r(t)-q̇))
+	v = SVector{2}(q̇r(t) + Λ*(qr(t)-q))
+	r = SVector{2}((q̇r(t)-q̇) + Λ*(qr(t)-q))
+	return SVector{5}(inv(Γ)*Ȳ(q,q̇,a,v)'*r) # Θ̂̇
 end
 
 # ╔═╡ 5d075e8d-ed5d-432a-ad62-762d3488a96d
-function slotine_li_controller!(du, u, param, t)
-	q̇, q, Θ̂ = u
-	q̈, Θ̂̇, p = param
-	du[1] = dq̇ = q̈(q̇,q,Θ̂,p,t)
-	du[2] = dq = q̇
-	du[3] = dΘ̂ = Θ̂̇(q̇,q,Θ̂,p,t)
+function slotine_li_controller!(u, p, t)
+	q = @view u[1:2]
+	q̇ = @view u[3:4]
+	Θ̂ = @view u[5:9]
+	q̈, Θ̂̇, param = p
+	return SVector{9}([q̇; q̈(q,q̇,Θ̂,param,t); Θ̂̇(q,q̇,Θ̂,param,t)]) # du = [dq; dq̇; dΘ̂]
 end
 
-# ╔═╡ 3a6a9552-ad52-445b-8469-8e8842bf6d54
+# ╔═╡ de1bad37-098b-4ef0-b45d-86fb330e68aa
 begin
-	# ode setup
-	p = (qr=qref, q̇r=q̇ref, q̈r=q̈ref, Λ=Diagonal(λᵢ), K=Diagonal(kᵢ), Γ=Diagonal(γᵢ), 
-	 	 M=M, C=C, ∇P=∇P, Ȳ=Ȳ)
-	u₀ = [q̇ref₀, qref₀, Θ̂₀]
-	param = [q̈, Θ̂̇, p]
-	tspan = (0.,20.)
-	prob = ODEProblem(slotine_li_controller!, u₀, tspan, param)
+	# ode perturbation setup
+	function affect!(integrator)
+	    param = integrator.p[3]
+		perturb_∇P(q) = @SVector [0; 0] # free fall
+		integrator.p[3] = (; param..., ∇P=perturb_∇P) # override previous ∇P
+	end
+	cb = PresetTimeCallback(10.0, affect!)
 end;
 
-# ╔═╡ a876f8d0-b300-4764-8995-b3606a46852e
-sol = solve(prob);
+# ╔═╡ 5d9ace61-b310-4ff7-8305-cacb66c71792
+# make a moving plot animation for parameter estimates over time
+# plot input torque over time
+# speed up simulation using static arrays
+# show error convergence plots for both pos and vel afterwards
 
-# ╔═╡ 37fd4fb1-5473-42d5-a3e1-27427652af66
-plot(sol)
+# ╔═╡ bdee562b-c540-4787-90fc-23cccd3c86b5
+# would incorrect dynamics also work in terms of converging? For example if the control model Ȳ() is incorrect
+
+# ╔═╡ 3ab34fb1-f258-41a5-9f62-746882c57c53
+# what's the predictive part of this adaptive model?
 
 # ╔═╡ 4e5d142b-8964-4257-a713-000d3428f8b3
 macro multidef(ex)
@@ -142,11 +181,51 @@ macro multidef(ex)
 	rex
 end;
 
+# ╔═╡ a9db3c87-99c7-4074-b846-e7fd14c921b6
+@multidef λᵢ, kᵢ = fill(c, 2); γᵢ = fill(c, 5); # diagonal elements
+
+# ╔═╡ 3a6a9552-ad52-445b-8469-8e8842bf6d54
+begin
+	# ode setup
+	param = (qr=qref, q̇r=q̇ref, q̈r=q̈ref, Λ=SMatrix{2,2}(Diagonal(λᵢ)), 
+		 	 K=SMatrix{2,2}(Diagonal(kᵢ)), Γ=SMatrix{5,5}(Diagonal(γᵢ)), 
+		 	 M=M, C=C, ∇P=∇P, Ȳ=Ȳ)
+	u₀ = SVector{9}([qref₀; q̇ref₀; Θ̂₀])
+	p = [q̈, Θ̂̇, param]
+	tspan = (0.0, 20.0)
+	prob = ODEProblem(slotine_li_controller!, u₀, tspan, p)
+end;
+
+# ╔═╡ a876f8d0-b300-4764-8995-b3606a46852e
+sol = solve(prob; callback=cb);
+
+# ╔═╡ 423a1005-4969-49aa-a59e-212d40c0dc5d
+qr = hcat(qref.(sol.t)...);
+
+# ╔═╡ 87340ffd-6790-4090-a585-08da4de89e09
+qc = sol[3:4, :];
+
+# ╔═╡ 63e36324-a6ce-46ac-8c9f-793645ea4021
+begin
+	plot(;layout=(2,1))
+	plot!(subplot=1, sol.t, qr[1,:]; linecolor="cyan", label="ref")
+	plot!(subplot=1, sol.t, sol[3,:]; linecolor="red", label="ctr")
+	plot!(subplot=1; ylabel=L"q_1(t)")
+	plot!(subplot=2, sol.t, qr[2,:]; linecolor="cyan", label="ref")
+	plot!(subplot=2, sol.t, sol[4,:]; linecolor="red", label="ctr")
+	plot!(subplot=2; ylabel=L"q_2(t)", xlabel=L"t")
+	plot!(subplot=1, [10]; seriestype="vline", label="")
+	plot!(subplot=2, [10]; seriestype="vline", label="")
+	annotate!(10.1, 1.1, text("perturbation onset", :white, :left, 4))
+	plot!() |> as_svg
+end
+
 # ╔═╡ bab6ea17-b0a4-4553-91b2-cf8a16f52341
 begin
 	# arm plot and gif/movie making functions
 	function FK(q)
-		N = size(q,2)
+		N = length(q)
+		L = [l₁, l₂]
 		@multidef xs, ys = zeros(N+1); qsum = 0;
 		for i ∈ 1:N
 			qsum   += q[i];
@@ -155,42 +234,84 @@ begin
 		end
 		return [xs, ys]
 	end
-	function plot_arm(L, q; alpha=1.0)
+	function plot_arm(L, q; alpha=1.0, clr="blue", lbl="")
 		@assert length(L) == length(q)
 		x, y = FK(q)
 		lmax = sum(L)
-		plot(x, y; xlims=(-lmax, lmax), ylims=(-lmax, lmax), linewidth=5, 
-			legend=false, aspect_ratio=:equal, alpha=alpha)
+		plot!(x, y; xlims=(-lmax, lmax), ylims=(-lmax, lmax), linewidth=5, 
+			label=lbl, linecolor=clr, aspect_ratio=:equal, alpha=alpha)
 		scatter!(x[1:end-1], y[1:end-1]; markercolor="orange", markersize=3,
-			markershape=:circle)
+			markershape=:circle, label="")
 	end
 	function plot_base()
-		scatter!([0], [-0.04]; markercolor="grey", markersize=7, 
-			markershape=:utriangle)
+		scatter!([0], [-0.02]; markercolor="grey", markersize=7, 
+			markershape=:utriangle, label="")
 	end
-	function anim(qr, qc; title="")
+	function anim(qr, qc, t; title="")
 		@assert size(qr) == size(qc)
-		@gif for i = 1:size(qr, 2)
-			plot_arm([l₁, l₂], qr[:, i]; alpha=0.5) # reference trajectory
-			plot_arm([l₁, l₂], qc[:, i]; alpha=1.0) # controller trajectory
+		function searchsortednearest(a, x; by=identity, lt=isless, rev=false,
+									 distance=(a,b)->abs(a-b))
+		    i = searchsortedfirst(a, x; by, lt, rev)
+		    if i == 1
+		    elseif i > length(a)
+		        i = length(a)
+		    elseif a[i] == x
+		    else
+		        i = lt(distance(by(a[i]), by(x)), distance(by(a[i - 1]), by(x))) ? 
+				i : i - 1
+		    end
+		    return i
+		end
+		k = round(Int, 0.4*length(t)/(tspan[2]-tspan[1]))
+		ts = LinRange(tspan[1], tspan[2], round(Int, k*(tspan[2]-tspan[1])))
+		idxs = OrderedSet{Int}()
+		for ti ∈ ts
+			i = searchsortednearest(t, ti)
+			if abs(t[i]-ti) < (1/k)
+				push!(idxs, i)
+			end
+		end
+		idxs = idxs |> collect
+		tsel = t[idxs]
+		qrsel = qr[:, idxs]
+		qcsel = qc[:, idxs]
+		@gif for i = 1:length(tsel)
+			plot(; title=title)
+			plot_arm([l₁,l₂], qrsel[:,i]; alpha=0.3, clr="cyan", lbl="ref")
+			plot_arm([l₁,l₂], qcsel[:,i]; alpha=1.0, clr="red", lbl="ctr")
 			plot_base()
-			plot!(; title=title)
+			annotate!(
+				-0.5, 0.5,
+				text("\$t=$(round(tsel[i];digits=2))s\$",:left, :white, 10)
+			)
 		end
 	end
-end
+end;
+
+# ╔═╡ 56d46c09-45e3-44e4-a274-87d9853e5e72
+# ╠═╡ show_logs = false
+anim(qr, qc, sol.t)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
+LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+PlotThemes = "ccf2f8ad-2431-5c83-bf29-c5338b663b6a"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [compat]
 DifferentialEquations = "~7.1.0"
+LaTeXStrings = "~1.3.0"
+OrderedCollections = "~1.4.1"
+PlotThemes = "~3.0.0"
 Plots = "~1.30.1"
+PlutoUI = "~0.7.39"
 StaticArrays = "~1.4.7"
 UnPack = "~1.0.2"
 """
@@ -201,6 +322,12 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.7.2"
 manifest_format = "2.0"
+
+[[deps.AbstractPlutoDingetjes]]
+deps = ["Pkg"]
+git-tree-sha1 = "8eaf9f1b4921132a4cff3f36a1d9ba923b14a481"
+uuid = "6e696c72-6542-2067-7265-42206c756150"
+version = "1.1.4"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra"]
@@ -684,6 +811,24 @@ git-tree-sha1 = "cb7099a0109939f16a4d3b572ba8396b1f6c7c31"
 uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
 version = "0.3.10"
 
+[[deps.Hyperscript]]
+deps = ["Test"]
+git-tree-sha1 = "8d511d5b81240fc8e6802386302675bdf47737b9"
+uuid = "47d2ed2b-36de-50cf-bf87-49c2cf4b8b91"
+version = "0.0.4"
+
+[[deps.HypertextLiteral]]
+deps = ["Tricks"]
+git-tree-sha1 = "c47c5fa4c5308f27ccaac35504858d8914e102f9"
+uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+version = "0.9.4"
+
+[[deps.IOCapture]]
+deps = ["Logging", "Random"]
+git-tree-sha1 = "f7be53659ab06ddc986428d3a9dcc95f6fa6705a"
+uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
+version = "0.2.2"
+
 [[deps.IfElse]]
 git-tree-sha1 = "debdd00ffef04665ccbb3e150747a77560e8fad1"
 uuid = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
@@ -1107,6 +1252,12 @@ git-tree-sha1 = "2402dffcbc5bb1631fb4f10cb5c3698acdce29ea"
 uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 version = "1.30.1"
 
+[[deps.PlutoUI]]
+deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
+git-tree-sha1 = "8d1f54886b9037091edf146b517989fc4a09efec"
+uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+version = "0.7.39"
+
 [[deps.PoissonRandom]]
 deps = ["Random"]
 git-tree-sha1 = "9ac1bb7c15c39620685a3a7babc0651f5c64c35b"
@@ -1445,6 +1596,11 @@ git-tree-sha1 = "b8d08f55b02625770c09615d96927b3a8396925e"
 uuid = "d5829a12-d9aa-46ab-831f-fb7c9ab06edf"
 version = "0.1.11"
 
+[[deps.Tricks]]
+git-tree-sha1 = "6bac775f2d42a611cdfcd1fb217ee719630c4175"
+uuid = "410a4b4d-49e4-4fbc-ab6d-cb71b17b3775"
+version = "0.1.6"
+
 [[deps.URIs]]
 git-tree-sha1 = "97bbe755a53fe859669cd907f2d96aee8d2c1355"
 uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
@@ -1708,13 +1864,14 @@ version = "0.9.1+5"
 
 # ╔═╡ Cell order:
 # ╟─0c41a6b8-eff2-11ec-083c-cd8a2b0bfd14
-# ╠═c9435471-2965-49e2-8063-b6051e540895
 # ╠═f09bf238-f52c-4c24-a39a-66c6d570fcf4
+# ╟─15cce339-52a6-4ef4-9300-2753a0204740
 # ╠═970cd6b4-4acb-4e80-9564-e7f1cb595c19
 # ╠═86079195-0cee-4286-b47a-5e29c76d171c
 # ╠═59d8474f-7514-45a6-85e0-0a5b53a95288
 # ╠═5dca8f5b-35b9-45f8-bf77-f7c6a41b327b
 # ╠═449949ff-2403-4ac3-bb25-270308744fc0
+# ╟─0e0ff555-549e-4265-a341-a48f9a4deae4
 # ╠═a32a1c33-d68e-4915-adb8-4f6c1366b3e0
 # ╠═d8aeaef7-85a0-4ad9-a59b-56d72ff16ff9
 # ╠═2f481697-de8c-4804-bd4d-c30c96c4a9ba
@@ -1722,16 +1879,23 @@ version = "0.9.1+5"
 # ╠═f8b13ccd-1193-4d75-ae6a-11600f29020d
 # ╠═15ff2cbf-0bc6-4c75-9c9e-422985c7eca9
 # ╠═070f7f0b-90bd-44fe-9ac9-10f33aefe6ad
+# ╟─ecb1b0f6-5048-45ee-ab86-5423c3229101
 # ╠═a9db3c87-99c7-4074-b846-e7fd14c921b6
-# ╠═57299277-c95f-499f-ad99-cf5c7795136e
-# ╠═d157a507-f38d-4d36-8f94-9ed0b5d0b4c8
 # ╠═1f910dfe-5cf8-42a2-8c1c-ea01d9fcfbf6
 # ╠═73cc2dc4-1328-4e6a-aa6d-bcf0ed287d62
 # ╠═5d075e8d-ed5d-432a-ad62-762d3488a96d
 # ╠═3a6a9552-ad52-445b-8469-8e8842bf6d54
+# ╠═de1bad37-098b-4ef0-b45d-86fb330e68aa
 # ╠═a876f8d0-b300-4764-8995-b3606a46852e
-# ╠═37fd4fb1-5473-42d5-a3e1-27427652af66
-# ╠═bab6ea17-b0a4-4553-91b2-cf8a16f52341
+# ╠═423a1005-4969-49aa-a59e-212d40c0dc5d
+# ╠═87340ffd-6790-4090-a585-08da4de89e09
+# ╟─56d46c09-45e3-44e4-a274-87d9853e5e72
+# ╠═5d9ace61-b310-4ff7-8305-cacb66c71792
+# ╟─63e36324-a6ce-46ac-8c9f-793645ea4021
+# ╠═bdee562b-c540-4787-90fc-23cccd3c86b5
+# ╠═3ab34fb1-f258-41a5-9f62-746882c57c53
 # ╟─4e5d142b-8964-4257-a713-000d3428f8b3
+# ╟─bab6ea17-b0a4-4553-91b2-cf8a16f52341
+# ╟─b519cf68-4dea-4436-b5f6-dbc9922adc73
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
