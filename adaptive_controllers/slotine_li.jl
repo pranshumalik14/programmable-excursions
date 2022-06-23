@@ -93,7 +93,7 @@ C(q, q̇) = @SMatrix [-m₂*l₁*lc₂*sin(q[2])*q̇[2] -m₂*l₁*lc₂*sin(q[2
 
 # ╔═╡ 2f481697-de8c-4804-bd4d-c30c96c4a9ba
 ∇P(q) = @SVector [(m₁*lc₁+m₂*l₁)*g*cos(q[1])+m₂*lc₂*g*cos(q[1]+q[2]);
-		 		  m₂*lc₂*g*cos(q[1]+q[2])]
+				  m₂*lc₂*g*cos(q[1]+q[2])]
 
 # ╔═╡ d0c7a57c-663e-4f89-a767-b7772a732f4e
 Ȳ(q, q̇, a, v) = @SMatrix [a[1] cos(q[2])*(2a[1]+a[2])-sin(q[2])*(q̇[2]*v[1]+(q̇[1]+q̇[2])*v[2]) a[2] g*cos(q[1]) g*cos(q[1]+q[2]); 0 cos(q[2])*a[1]+sin(q[2])*q̇[1]*v[1] a[1]+a[2] 0 g*cos(q[1]+q[2])]
@@ -101,7 +101,7 @@ Ȳ(q, q̇, a, v) = @SMatrix [a[1] cos(q[2])*(2a[1]+a[2])-sin(q[2])*(q̇[2]*v[1]
 # ╔═╡ f8b13ccd-1193-4d75-ae6a-11600f29020d
 begin
 	# reference signals
-	qref(t) = [sin(2t); sin(t)] # offset +π/4
+	qref(t) = [sin(2t); sin(t)] # todo: offset sin(t) by π/4
 	q̇ref(t) = [2cos(2t); cos(t)]
 	q̈ref(t) = [-4sin(2t); -sin(t)]
 end;
@@ -159,7 +159,7 @@ end;
 # ╔═╡ 5d9ace61-b310-4ff7-8305-cacb66c71792
 # make a moving plot animation for parameter estimates over time
 # plot input torque over time
-# speed up simulation using static arrays
+# compare with proportional-integral controller?????
 # show error convergence plots for both pos and vel afterwards
 
 # ╔═╡ bdee562b-c540-4787-90fc-23cccd3c86b5
@@ -188,8 +188,8 @@ end;
 begin
 	# ode setup
 	param = (qr=qref, q̇r=q̇ref, q̈r=q̈ref, Λ=SMatrix{2,2}(Diagonal(λᵢ)), 
-		 	 K=SMatrix{2,2}(Diagonal(kᵢ)), Γ=SMatrix{5,5}(Diagonal(γᵢ)), 
-		 	 M=M, C=C, ∇P=∇P, Ȳ=Ȳ)
+			 K=SMatrix{2,2}(Diagonal(kᵢ)), Γ=SMatrix{5,5}(Diagonal(γᵢ)), 
+			 M=M, C=C, ∇P=∇P, Ȳ=Ȳ)
 	u₀ = SVector{9}([qref₀; q̇ref₀; Θ̂₀])
 	p = [q̈, Θ̂̇, param]
 	tspan = (0.0, 20.0)
@@ -203,16 +203,16 @@ sol = solve(prob; callback=cb);
 qr = hcat(qref.(sol.t)...);
 
 # ╔═╡ 87340ffd-6790-4090-a585-08da4de89e09
-qc = sol[3:4, :];
+qc = sol[1:2, :];
 
 # ╔═╡ 63e36324-a6ce-46ac-8c9f-793645ea4021
 begin
 	plot(;layout=(2,1))
 	plot!(subplot=1, sol.t, qr[1,:]; linecolor="cyan", label="ref")
-	plot!(subplot=1, sol.t, sol[3,:]; linecolor="red", label="ctr")
+	plot!(subplot=1, sol.t, sol[1,:]; linecolor="red", label="ctr")
 	plot!(subplot=1; ylabel=L"q_1(t)")
 	plot!(subplot=2, sol.t, qr[2,:]; linecolor="cyan", label="ref")
-	plot!(subplot=2, sol.t, sol[4,:]; linecolor="red", label="ctr")
+	plot!(subplot=2, sol.t, sol[2,:]; linecolor="red", label="ctr")
 	plot!(subplot=2; ylabel=L"q_2(t)", xlabel=L"t")
 	plot!(subplot=1, [10]; seriestype="vline", label="")
 	plot!(subplot=2, [10]; seriestype="vline", label="")
