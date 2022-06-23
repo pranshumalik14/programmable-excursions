@@ -101,7 +101,7 @@ Ȳ(q, q̇, a, v) = @SMatrix [a[1] cos(q[2])*(2a[1]+a[2])-sin(q[2])*(q̇[2]*v[1]
 # ╔═╡ f8b13ccd-1193-4d75-ae6a-11600f29020d
 begin
 	# reference signals
-	qref(t) = [sin(2t); sin(t)] # todo: offset sin(t) by π/4
+	qref(t) = [sin(2t); sin(t)]
 	q̇ref(t) = [2cos(2t); cos(t)]
 	q̈ref(t) = [-4sin(2t); -sin(t)]
 end;
@@ -145,28 +145,27 @@ function slotine_li_controller!(u, p, t)
 	return SVector{9}([q̇; q̈(q,q̇,Θ̂,param,t); Θ̂̇(q,q̇,Θ̂,param,t)]) # du = [dq; dq̇; dΘ̂]
 end
 
-# ╔═╡ de1bad37-098b-4ef0-b45d-86fb330e68aa
-begin
-	# ode perturbation setup
-	function affect!(integrator)
-	    param = integrator.p[3]
-		perturb_∇P(q) = @SVector [0; 0] # free fall
-		integrator.p[3] = (; param..., ∇P=perturb_∇P) # override previous ∇P
-	end
-	cb = PresetTimeCallback(10.0, affect!)
-end;
-
-# ╔═╡ 5d9ace61-b310-4ff7-8305-cacb66c71792
-# make a moving plot animation for parameter estimates over time
-# plot input torque over time
-# compare with proportional-integral controller?????
-# show error convergence plots for both pos and vel afterwards
-
 # ╔═╡ bdee562b-c540-4787-90fc-23cccd3c86b5
-# would incorrect dynamics also work in terms of converging? For example if the control model Ȳ() is incorrect
+# would incorrect dynamics also work in terms of converging? For example, if the control model Ȳ() is incorrect
 
 # ╔═╡ 3ab34fb1-f258-41a5-9f62-746882c57c53
 # what's the predictive part of this adaptive model?
+
+# ╔═╡ 0dd94f1b-b4ad-4c9b-a330-6e83f9f7d71f
+md"
+
+## Comparison to PI Controllers
+
+alternatively, also look into gravity compensation alg???
+
+"
+
+# ╔═╡ 5d9ace61-b310-4ff7-8305-cacb66c71792
+# compare with proportional-integral controller
+# create a canvas for comparing the tracking performance of the controllers and having 
+#  a customizable demo
+# the parameters seem to converge; check if using the incorrect Y() causes non-converging params!
+# SYNCHRONIZE GIFS!!!
 
 # ╔═╡ 4e5d142b-8964-4257-a713-000d3428f8b3
 macro multidef(ex)
@@ -186,7 +185,7 @@ end;
 
 # ╔═╡ 3a6a9552-ad52-445b-8469-8e8842bf6d54
 begin
-	# ode setup
+	# ode problem setup
 	param = (qr=qref, q̇r=q̇ref, q̈r=q̈ref, Λ=SMatrix{2,2}(Diagonal(λᵢ)), 
 			 K=SMatrix{2,2}(Diagonal(kᵢ)), Γ=SMatrix{5,5}(Diagonal(γᵢ)), 
 			 M=M, C=C, ∇P=∇P, Ȳ=Ȳ)
@@ -194,19 +193,26 @@ begin
 	p = [q̈, Θ̂̇, param]
 	tspan = (0.0, 20.0)
 	prob = ODEProblem(slotine_li_controller!, u₀, tspan, p)
+
+	# ode perturbation setup: teleport to a large planet or place in a centrifuge
+	function affect!(integrator)
+	    param = integrator.p[3]
+		perturb_∇P(q;g′=5g) =
+			@SVector [(m₁*lc₁+m₂*l₁)*g′*cos(q[1])+m₂*lc₂*g′*cos(q[1]+q[2]);
+				  	  m₂*lc₂*g′*cos(q[1]+q[2])]
+		integrator.p[3] = (; param..., ∇P=perturb_∇P) # override previous ∇P
+	end
+	cb = PresetTimeCallback(10.0, affect!)
 end;
 
 # ╔═╡ a876f8d0-b300-4764-8995-b3606a46852e
 sol = solve(prob; callback=cb);
 
 # ╔═╡ 423a1005-4969-49aa-a59e-212d40c0dc5d
-qr = hcat(qref.(sol.t)...);
-
-# ╔═╡ 87340ffd-6790-4090-a585-08da4de89e09
-qc = sol[1:2, :];
+qr = mapreduce(qref, hcat, sol.t); qc = sol[1:2, :]; # reference and control angles
 
 # ╔═╡ 63e36324-a6ce-46ac-8c9f-793645ea4021
-begin
+let
 	plot(;layout=(2,1))
 	plot!(subplot=1, sol.t, qr[1,:]; linecolor="cyan", label="ref")
 	plot!(subplot=1, sol.t, sol[1,:]; linecolor="red", label="ctr")
@@ -216,7 +222,30 @@ begin
 	plot!(subplot=2; ylabel=L"q_2(t)", xlabel=L"t")
 	plot!(subplot=1, [10]; seriestype="vline", label="")
 	plot!(subplot=2, [10]; seriestype="vline", label="")
-	annotate!(10.1, 1.1, text("perturbation onset", :white, :left, 4))
+	annotate!(subplot=1, 10.1, 1.1, text("perturbation onset", :white, :left, 4))
+	plot!() |> as_svg
+end
+
+# ╔═╡ d8fa740d-964e-481f-a0d2-bdbbc2541e64
+let
+	plot(;layout=(3,1))
+	q̇r = mapreduce(q̇ref, hcat, sol.t)
+	plot!(subplot=1, sol.t, qr[1,:]-sol[1,:]; linecolor="pink2", label=L"\tilde{q}_1")
+	plot!(subplot=1, sol.t, qr[2,:]-sol[2,:]; linecolor="pink4", label=L"\tilde{q}_2")
+	plot!(subplot=1; ylabel=L"\tilde{\mathbf{q}}(t)", legend=:bottomright)
+	plot!(subplot=2, sol.t, q̇r[1,:]-sol[3,:]; linecolor="pink2", 
+		  label=L"\dot{\tilde{q}_1}")
+	plot!(subplot=2, sol.t, q̇r[2,:]-sol[4,:]; linecolor="pink4", 
+		  label=L"\dot{\tilde{q}_2}")
+	plot!(subplot=2; ylabel=L"\dot{\tilde{\mathbf{q}}(}t)", legend=:topright)
+	r = (q̇r-sol[3:4,:]) .+ mapslices(col->param.Λ*col, qr-sol[1:2,:]; dims=1)
+	plot!(subplot=3, sol.t, r[1,:]; linecolor="pink2", label=L"r_1")
+	plot!(subplot=3, sol.t, r[2,:]; linecolor="pink4", label=L"r_2")
+	plot!(subplot=3; ylabel=L"\mathbf{r}(t)", xlabel=L"t", legend=:bottomright)
+	plot!(subplot=1, [10]; seriestype="vline", label="")
+	plot!(subplot=2, [10]; seriestype="vline", label="")
+	plot!(subplot=3, [10]; seriestype="vline", label="")
+	annotate!(subplot=1, 10.1, -0.5, text("perturbation onset", :white, :left, 4))
 	plot!() |> as_svg
 end
 
@@ -247,27 +276,27 @@ begin
 		scatter!([0], [-0.02]; markercolor="grey", markersize=7, 
 			markershape=:utriangle, label="")
 	end
+	function searchsortednearest(a, x; by=identity, lt=isless, rev=false,
+								 distance=(a,b)->abs(a-b))
+		i = searchsortedfirst(a, x; by, lt, rev)
+		if i == 1
+		elseif i > length(a)
+			i = length(a)
+		elseif a[i] == x
+		else
+			i = lt(distance(by(a[i]), by(x)), distance(by(a[i - 1]), by(x))) ? 
+			i : i - 1
+		end
+		return i
+	end
 	function anim(qr, qc, t; title="")
 		@assert size(qr) == size(qc)
-		function searchsortednearest(a, x; by=identity, lt=isless, rev=false,
-									 distance=(a,b)->abs(a-b))
-		    i = searchsortedfirst(a, x; by, lt, rev)
-		    if i == 1
-		    elseif i > length(a)
-		        i = length(a)
-		    elseif a[i] == x
-		    else
-		        i = lt(distance(by(a[i]), by(x)), distance(by(a[i - 1]), by(x))) ? 
-				i : i - 1
-		    end
-		    return i
-		end
 		k = round(Int, 0.4*length(t)/(tspan[2]-tspan[1]))
 		ts = LinRange(tspan[1], tspan[2], round(Int, k*(tspan[2]-tspan[1])))
 		idxs = OrderedSet{Int}()
 		for ti ∈ ts
 			i = searchsortednearest(t, ti)
-			if abs(t[i]-ti) < (1/k)
+			if abs(t[i]-ti) < 1/(2k)
 				push!(idxs, i)
 			end
 		end
@@ -275,7 +304,7 @@ begin
 		tsel = t[idxs]
 		qrsel = qr[:, idxs]
 		qcsel = qc[:, idxs]
-		@gif for i = 1:length(tsel)
+		gif = @gif for i = 1:length(tsel)
 			plot(; title=title)
 			plot_arm([l₁,l₂], qrsel[:,i]; alpha=0.3, clr="cyan", lbl="ref")
 			plot_arm([l₁,l₂], qcsel[:,i]; alpha=1.0, clr="red", lbl="ctr")
@@ -285,12 +314,39 @@ begin
 				text("\$t=$(round(tsel[i];digits=2))s\$",:left, :white, 10)
 			)
 		end
+		return gif, idxs
 	end
 end;
 
 # ╔═╡ 56d46c09-45e3-44e4-a274-87d9853e5e72
 # ╠═╡ show_logs = false
-anim(qr, qc, sol.t)
+begin
+	gif, idxs = anim(qr, qc, sol.t)
+	gif
+end
+
+# ╔═╡ 752f134f-250f-4bab-beef-7fffad46f5e6
+# ╠═╡ show_logs = false
+let
+	ts = sol.t[idxs]
+	t₁(i) = (ts[i] > 1.5) ? searchsortednearest(ts, ts[i]-1.5) : 1;
+	t₂(i) = (ts[i] > 1.5) ? searchsortednearest(ts, ts[i]+0.5) : 
+							searchsortednearest(ts, ts[i]*4/3);
+	# a = (q̈r(t) + Λ*(q̇r(t)-q̇))
+	# v = SVector{2}(q̇r(t) + Λ*(qr(t)-q))
+	# r = SVector{2}((q̇r(t)-q̇) + Λ*(qr(t)-q))
+	# u = SVector{2}(Ȳ(q,q̇,a,v)*Θ̂ + K*r)
+	@gif for i = 1:length(ts)
+		plot(; xlabel=L"t", layout=(1,2))
+		[
+			plot!(subplot=1, ts[t₁(i):t₂(i)], sol[n, t₁(i):t₂(i)], 
+				  label="\$\\hat{\\Theta}_$(n-4)\$", 
+				  ylabel=L"\hat{\mathbf{\Theta}}") 
+			for n ∈ 5:9
+		]
+		# plot!(subplot=2, ts[t₁(i):t₂(i)], u[t₁(i):t₂(i)])
+	end
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1885,15 +1941,16 @@ version = "0.9.1+5"
 # ╠═73cc2dc4-1328-4e6a-aa6d-bcf0ed287d62
 # ╠═5d075e8d-ed5d-432a-ad62-762d3488a96d
 # ╠═3a6a9552-ad52-445b-8469-8e8842bf6d54
-# ╠═de1bad37-098b-4ef0-b45d-86fb330e68aa
 # ╠═a876f8d0-b300-4764-8995-b3606a46852e
 # ╠═423a1005-4969-49aa-a59e-212d40c0dc5d
-# ╠═87340ffd-6790-4090-a585-08da4de89e09
 # ╟─56d46c09-45e3-44e4-a274-87d9853e5e72
-# ╠═5d9ace61-b310-4ff7-8305-cacb66c71792
+# ╠═752f134f-250f-4bab-beef-7fffad46f5e6
 # ╟─63e36324-a6ce-46ac-8c9f-793645ea4021
+# ╟─d8fa740d-964e-481f-a0d2-bdbbc2541e64
 # ╠═bdee562b-c540-4787-90fc-23cccd3c86b5
 # ╠═3ab34fb1-f258-41a5-9f62-746882c57c53
+# ╟─0dd94f1b-b4ad-4c9b-a330-6e83f9f7d71f
+# ╠═5d9ace61-b310-4ff7-8305-cacb66c71792
 # ╟─4e5d142b-8964-4257-a713-000d3428f8b3
 # ╟─bab6ea17-b0a4-4553-91b2-cf8a16f52341
 # ╟─b519cf68-4dea-4436-b5f6-dbc9922adc73
