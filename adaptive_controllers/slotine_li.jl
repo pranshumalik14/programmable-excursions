@@ -165,7 +165,7 @@ alternatively, also look into gravity compensation alg???
 # create a canvas for comparing the tracking performance of the controllers and having 
 #  a customizable demo
 # the parameters seem to converge; check if using the incorrect Y() causes non-converging params!
-# SYNCHRONIZE GIFS!!!
+# SYNCHRONIZE GIFS!!! Maybe display and generate gifs separately (show([arm_gif;ctrl_gif]))
 
 # ╔═╡ 4e5d142b-8964-4257-a713-000d3428f8b3
 macro multidef(ex)
@@ -238,7 +238,7 @@ let
 	plot!(subplot=2, sol.t, q̇r[2,:]-sol[4,:]; linecolor="pink4", 
 		  label=L"\dot{\tilde{q}_2}")
 	plot!(subplot=2; ylabel=L"\dot{\tilde{\mathbf{q}}(}t)", legend=:topright)
-	r = (q̇r-sol[3:4,:]) .+ mapslices(col->param.Λ*col, qr-sol[1:2,:]; dims=1)
+	r = (q̇r-sol[3:4,:]) + mapslices(col->param.Λ*col, qr-sol[1:2,:]; dims=1)
 	plot!(subplot=3, sol.t, r[1,:]; linecolor="pink2", label=L"r_1")
 	plot!(subplot=3, sol.t, r[2,:]; linecolor="pink4", label=L"r_2")
 	plot!(subplot=3; ylabel=L"\mathbf{r}(t)", xlabel=L"t", legend=:bottomright)
@@ -321,30 +321,38 @@ end;
 # ╔═╡ 56d46c09-45e3-44e4-a274-87d9853e5e72
 # ╠═╡ show_logs = false
 begin
-	gif, idxs = anim(qr, qc, sol.t)
-	gif
+	arm_gif, idxs = anim(qr, qc, sol.t);
+	arm_gif
 end
 
 # ╔═╡ 752f134f-250f-4bab-beef-7fffad46f5e6
 # ╠═╡ show_logs = false
-let
+begin
 	ts = sol.t[idxs]
 	t₁(i) = (ts[i] > 1.5) ? searchsortednearest(ts, ts[i]-1.5) : 1;
 	t₂(i) = (ts[i] > 1.5) ? searchsortednearest(ts, ts[i]+0.5) : 
 							searchsortednearest(ts, ts[i]*4/3);
-	# a = (q̈r(t) + Λ*(q̇r(t)-q̇))
-	# v = SVector{2}(q̇r(t) + Λ*(qr(t)-q))
-	# r = SVector{2}((q̇r(t)-q̇) + Λ*(qr(t)-q))
-	# u = SVector{2}(Ȳ(q,q̇,a,v)*Θ̂ + K*r)
-	@gif for i = 1:length(ts)
+	Θ̂s = sol[5:9, idxs]
+	qr′= qr[:,idxs]
+	q̇r = mapreduce(q̇ref, hcat, ts)
+	q̈r = mapreduce(q̈ref, hcat, ts)
+	a = q̈r + mapslices(col->param.Λ*col, q̇r-sol[3:4,idxs]; dims=1)
+	v = q̇r + mapslices(col->param.Λ*col, qr′-sol[1:2,idxs]; dims=1)
+	r = (q̇r-sol[3:4,idxs]) + mapslices(col->param.Λ*col, qr′-sol[1:2,idxs]; dims=1)
+	u = mapslices(col->Ȳ(col[1:2],col[3:4],col[5:6],col[7:8])*col[9:13], 
+		vcat(sol[1:4,idxs], a, v, sol[5:9,idxs]); dims=1) + 
+		mapslices(col->param.K*col, r; dims=1)
+	ctrl_gif = @gif for i = 1:length(ts)
 		plot(; xlabel=L"t", layout=(1,2))
 		[
-			plot!(subplot=1, ts[t₁(i):t₂(i)], sol[n, t₁(i):t₂(i)], 
-				  label="\$\\hat{\\Theta}_$(n-4)\$", 
+			plot!(subplot=1, ts[t₁(i):t₂(i)], Θ̂s[n, t₁(i):t₂(i)], 
+				  label="\$\\hat{\\Theta}_$(n)\$", 
 				  ylabel=L"\hat{\mathbf{\Theta}}") 
-			for n ∈ 5:9
+			for n ∈ 1:4
 		]
-		# plot!(subplot=2, ts[t₁(i):t₂(i)], u[t₁(i):t₂(i)])
+		plot!(subplot=2, ts[t₁(i):t₂(i)], u[1, t₁(i):t₂(i)]; label=L"u_1")
+		plot!(subplot=2, ts[t₁(i):t₂(i)], u[2, t₁(i):t₂(i)]; label=L"u_2")
+		plot!(subplot=2; ylabel=L"\mathbf{u}(t)")
 	end
 end
 
@@ -1944,7 +1952,7 @@ version = "0.9.1+5"
 # ╠═a876f8d0-b300-4764-8995-b3606a46852e
 # ╠═423a1005-4969-49aa-a59e-212d40c0dc5d
 # ╟─56d46c09-45e3-44e4-a274-87d9853e5e72
-# ╠═752f134f-250f-4bab-beef-7fffad46f5e6
+# ╟─752f134f-250f-4bab-beef-7fffad46f5e6
 # ╟─63e36324-a6ce-46ac-8c9f-793645ea4021
 # ╟─d8fa740d-964e-481f-a0d2-bdbbc2541e64
 # ╠═bdee562b-c540-4787-90fc-23cccd3c86b5
