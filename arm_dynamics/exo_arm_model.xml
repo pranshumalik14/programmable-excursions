@@ -1,0 +1,92 @@
+<mujoco model="exo_arm_sim">
+    <compiler angle="degree" inertiafromgeom="false"/>
+
+    <option gravity="0 0 0" integrator="RK4" timestep="0.001"
+            solver="PGS" noslip_iterations="50">
+        <flag contact="enable"/>
+    </option>
+
+    <default>
+        <default class="human">
+            <geom solref="0.01 1" solimp="0.8 0.8 0.001" contype="1" conaffinity="1" friction="0 0 0"/>
+            <material rgba="0.9 0.7 0.5 1"/>
+        </default>
+        <default class="exo">
+            <geom contype="1" conaffinity="1" friction="0 0 0"/>
+            <material rgba="0.3 0.3 0.3 0.8"/>
+        </default>
+    </default>
+
+    <asset>
+        <material name="cuff_mat" rgba="0.5 0.5 0.6 1.0"/>
+    </asset>
+
+    <worldbody>
+        <light diffuse=".5 .5 .5" pos="0 0 3" dir="0 0 -1"/>
+        <site name="shoulder_anchor" pos="0 0 0" size="0.01" rgba="1 0 0 0"/>
+
+        <body name="human_upper_arm" pos="0 0 0">
+            <inertial pos="0.146 0 0" mass="2.1" diaginertia="0.0058 0.0244 0.0244" />
+            <joint name="human_shoulder" type="hinge" axis="0 0 1" pos="0 0 0" damping="0.05" range="0 150"/>
+            <geom name="human_upper_arm_geom" type="capsule" fromto="0 0 0 0.335 0 0" size="0.04" class="human"/>
+            
+            <body name="human_forearm" pos="0.335 0 0">
+                <inertial pos="0.181 0 0" mass="1.65" diaginertia="0.003 0.025 0.025" />
+                <joint name="human_elbow" type="hinge" axis="0 0 1" pos="0 0 0" damping="0.05" range="0 150"/>
+                <geom name="human_forearm_geom" type="capsule" fromto="0 0 0 0.457 0 0" size="0.035" class="human"/>
+            </body>
+        </body>
+
+        <body name="exo_upper_link" pos="0 0 0">
+            <inertial pos="0.1675 0 0" mass="1.2" diaginertia="0.001 0.001 0.001" />
+            <joint name="exo_shoulder" type="hinge" axis="0 0 1" pos="0 0 0"/>
+            
+            <geom name="exo_upper_boom" type="capsule" fromto="0 0 -0.07 0.335 0 -0.07" size="0.015" class="exo"/>
+            <geom name="exo_shoulder_bracket" type="box" pos="0.1675 0 -0.0565" size="0.015 0.01 0.01" 
+                material="cuff_mat"/>
+
+            <geom name="shoulder_cuff_bottom" type="box" pos="0.1675 0 -0.043" size="0.05 0.041 0.002" 
+                material="cuff_mat" class="exo"/>
+            <geom name="shoulder_cuff_right" type="box" pos="0.1675 0.0425 0" size="0.05 0.002 0.0425" 
+                material="cuff_mat" class="exo"/>
+            <geom name="shoulder_cuff_left" type="box" pos="0.1675 -0.0425 0" size="0.05 0.002 0.0425" 
+                material="cuff_mat" class="exo"/>
+            <site name="shoulder_site_left" pos="0.1675 0.0425 0" type="box" size="0.05" rgba="0 1 0 1"/>
+            <site name="shoulder_site_right" pos="0.1675 -0.0425 0" type="box" size="0.05" rgba="1 0 0 1"/>
+
+            <body name="exo_lower_link" pos="0.335 0 0">
+                <inertial pos="0.2285 0 0" mass="1.5" diaginertia="0.001 0.001 0.001" />
+                <joint name="exo_elbow" type="hinge" axis="0 0 1" pos="0 0 0"/>
+
+                <geom name="exo_lower_boom" type="capsule" fromto="0 0 -0.07 0.457 0 -0.07" size="0.015" class="exo"/>
+                <geom name="exo_elbow_bracket" type="box" pos="0.2285 0 -0.054" size="0.015 0.01 0.017" 
+                    material="cuff_mat"/>
+
+                <geom name="elbow_cuff_bottom" type="box" pos="0.2285 0 -0.038" size="0.05 0.036 0.002" 
+                    material="cuff_mat" class="exo"/>
+                <geom name="elbow_cuff_left" type="box" pos="0.2285 0.0375 0" size="0.05 0.002 0.0375" 
+                    material="cuff_mat" class="exo"/>
+                <geom name="elbow_cuff_right" type="box" pos="0.2285 -0.0375 0"  size="0.05 0.002 0.0375" 
+                    material="cuff_mat" class="exo"/>
+                <site name="elbow_site_left" pos="0.2285 0.0375 0" type="box" size="0.05" rgba="0 1 0 1"/>
+                <site name="elbow_site_right" pos="0.2285 -0.0375 0" type="box" size="0.05" rgba="1 0 0 1"/>
+            </body>
+        </body>
+    </worldbody>
+
+    <actuator>
+        <motor joint="exo_shoulder" name="exo_shoulder_motor" gear="1" ctrllimited="true" ctrlrange="-20 20"/>
+        <motor joint="exo_elbow" name="exo_elbow_motor" gear="1" ctrllimited="true" ctrlrange="-20 20"/>
+    </actuator>
+
+    <sensor>
+        <touch name="sho_pressure_left" site="shoulder_site_left"/>
+        <touch name="sho_pressure_right" site="shoulder_site_right"/>
+        <touch name="elb_pressure_left" site="elbow_site_left"/>
+        <touch name="elb_pressure_right" site="elbow_site_right"/>
+    </sensor>
+
+    <keyframe>
+        <key name="start_pose" qpos="45 75 45 75"/>
+    </keyframe>
+</mujoco>

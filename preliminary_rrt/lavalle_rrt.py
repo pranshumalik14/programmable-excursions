@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
-import random, math, pygame
+import random
+import math
+import pygame
 from pygame.locals import *
 from math import sqrt, cos, sin, atan2
 
@@ -56,7 +58,7 @@ def main():
     while not done:
         for e in pygame.event.get():
             if e.type == QUIT or (e.type == KEYUP and e.key == K_ESCAPE):
-                print "Leaving because you said so\n"
+                print("Leaving because you said so\n")
                 done = 1
                 break
 
