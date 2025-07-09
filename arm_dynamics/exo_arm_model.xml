@@ -77,6 +77,8 @@
     <actuator>
         <motor joint="exo_shoulder" name="exo_shoulder_motor" gear="1" ctrllimited="true" ctrlrange="-20 20"/>
         <motor joint="exo_elbow" name="exo_elbow_motor" gear="1" ctrllimited="true" ctrlrange="-20 20"/>
+        <motor joint="human_shoulder" name="human_shoulder_motor" gear="1" ctrllimited="true" ctrlrange="-20 20"/>
+        <motor joint="human_elbow" name="human_elbow_motor" gear="1" ctrllimited="true" ctrlrange="-20 20"/>
     </actuator>
 
     <sensor>

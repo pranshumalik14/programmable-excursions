@@ -19,7 +19,7 @@ data = mujoco.MjData(model)
 init_sho_rad = 45 * np.pi / 180
 init_elb_rad = 75 * np.pi / 180
 
-duration = 0.2  # seconds
+duration = 0.5  # seconds
 times = []
 sho_ang = []
 elb_ang = []
@@ -59,11 +59,15 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         step_start = time.time()
 
         # apply constant torque to the exo motors (Nm)
-        shoulder_torque = 2
-        elbow_torque = 2
+        exo_sho_torque = 2 if data.time < 0.25 else 4
+        exo_elb_torque = 0 if data.time < 0.25 else 2
+        human_sho_torque = -2
+        human_elb_torque = 0
 
-        data.ctrl[0] = shoulder_torque
-        data.ctrl[1] = elbow_torque
+        data.ctrl[0] = exo_sho_torque
+        data.ctrl[1] = exo_elb_torque
+        data.ctrl[2] = human_sho_torque
+        data.ctrl[3] = human_elb_torque
 
         mujoco.mj_step(model, data)
         times.append(data.time)
@@ -73,11 +77,10 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         for name, id in sensor_ids.items():
             sensor_readings[name].append(data.sensordata[id])
 
-        viewer.cam.lookat[:] = data.body('human_forearm').xpos
         viewer.sync()
 
         # slo-mo
-        time_until_next_step = (model.opt.timestep * 50) - \
+        time_until_next_step = (model.opt.timestep * 25) - \
             (time.time() - step_start)
         if time_until_next_step > 0:
             time.sleep(time_until_next_step)
@@ -88,7 +91,7 @@ print("Simulation complete. Plotting results...")
 fig, axs = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
 fig.suptitle('Cuff Pressure Sensor Readings', fontsize=16)
 times_np = np.array(times)
-plot_mask = times_np <= 0.15
+plot_mask = times_np >= 0.2
 times_to_plot = times_np[plot_mask]
 
 # shoulder contact forces
